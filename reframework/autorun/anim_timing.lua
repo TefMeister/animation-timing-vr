@@ -312,8 +312,9 @@ end
 local function apply()
     if not target then return end
     local deltas = saved_deltas()
-    for name, v in pairs(nudge_live) do   -- the window's live delta on a joint replaces that joint's saved one (so a key is never doubled)
-        deltas[name] = v
+    for name, v in pairs(nudge_live) do   -- the window's live delta on a joint ADDS to that joint's saved one (2026-11-08: it used to replace it,
+        local s = deltas[name]             -- so a kept key vanished while its row stayed open at zero; the window keeps key = old key + live)
+        deltas[name] = s and { s[1] + v[1], s[2] + v[2], s[3] + v[3] } or v
     end
     local n = 0
     for name, d in pairs(deltas) do

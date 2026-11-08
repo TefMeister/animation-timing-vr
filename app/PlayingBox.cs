@@ -192,7 +192,14 @@ class PlayingBox : FoldBox {
         var key = keys.FirstOrDefault(k => (int)Math.Round(Json.Num(k["frame"], -1)) == frame);
         if (key == null) { key = new Dictionary<string, object>(); key["frame"] = (double)frame; key["joints"] = new Dictionary<string, object>(); keys.Add(key); }
         var js = Json.Obj(key["joints"]) ?? new Dictionary<string, object>();
-        foreach (var kv in Rows.All()) if (kv.Value.Any(x => Math.Abs(x) > 1e-6)) js[kv.Key] = kv.Value.Select(x => (object)Math.Round(x, 2)).ToList(); else js.Remove(kv.Key);
+        // the script plays saved key + live row, so a row's value is ADDED to what the key already holds for that joint (2026-11-08)
+        foreach (var kv in Rows.All()) {
+            if (!kv.Value.Any(x => Math.Abs(x) > 1e-6)) continue;
+            var old = js.ContainsKey(kv.Key) ? Json.Arr(js[kv.Key]) : null;
+            var sum = new double[3];
+            for (int i = 0; i < 3; i++) sum[i] = Math.Round(kv.Value[i] + (old != null && old.Count == 3 ? Json.Num(old[i], 0) : 0), 2);
+            if (sum.Any(x => Math.Abs(x) > 1e-6)) js[kv.Key] = sum.Select(x => (object)x).ToList(); else js.Remove(kv.Key);
+        }
         key["joints"] = js;
         SaveKeys(file, keys);
         // the key now carries the deltas: the live ones go to zero so nothing is doubled (the script plays the key)
