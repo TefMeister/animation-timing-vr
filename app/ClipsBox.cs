@@ -14,7 +14,14 @@ class ClipsBox : FoldBox {
     const int BASE_H = 375, SAVE_DEBOUNCE_MS = 120, STEPS = 10, PART_STEPS = 10, PART_ROW_H = 34;   // PART_STEPS: slider steps per percent
     Control pickRow, ctlRow, edRow, handBox, quickRow, keysRow;
     static readonly double[] HAND_RANGE = { 15, 15, 15, 180, 180, 180 };
-    static readonly string[] HAND_WORDS = { "right / left (x)", "up / down (y)", "forward / back (z)", "tilt (rx)", "turn (ry)", "roll (rz)" };
+    // 2026-11-08 (Tefa: left end = down / in / left / turn left, right end = up / out / right / turn right; "some of the sliders read
+    // left and right on them, but actually move the hand the opposite way"): measured in Village (visceral-re8-vr
+    // tools/sim/zz_test_axes.lua), the gun's +x points LEFT, so + on x went left, + on rx tilted DOWN, + on ry turned LEFT. Those
+    // three show their number turned round (HAND_FLIP); the edit files keep their numbers. The words: the left end's first.
+    static readonly string[] HAND_WORDS = { "left / right (x)", "down / up (y)", "back / forward (z)", "tilt down / up (rx)", "turn left / right (ry)", "roll left / right (rz)" };
+    static readonly string[] HAND_LEFT = { "LEFT", "DOWN", "BACK", "DOWN", "LEFT", "LEFT" }, HAND_RIGHT = { "RIGHT", "UP", "FORWARD", "UP", "RIGHT", "RIGHT" };
+    static readonly bool[] HAND_FLIP = { true, false, false, true, true, false };
+    static double HandSign(int i) { return HAND_FLIP[i] ? -1.0 : 1.0; }
     static readonly string[] HAND_UNIT = { "cm", "cm", "cm", "°", "°", "°" };
     readonly TimingUi ui;
     readonly Label where, frameLabel, keysNote, playingNote, clipLen;
@@ -96,7 +103,7 @@ class ClipsBox : FoldBox {
             string key = "clip:hand:" + i;
             handTick[i] = new SkinCheckBox { Width = 24, Height = 24, Checked = ui.IsTicked(key), Tag = key };
             handTick[i].CheckedChanged += (s, e) => ui.SetTicked(key, handTick[ax].Checked);
-            hand[i] = new FancySlider { Minimum = (int)(-HAND_RANGE[i] * STEPS), Maximum = (int)(HAND_RANGE[i] * STEPS), SmallChange = 5, LargeChange = 50, Height = 28, Signed = true };
+            hand[i] = new FancySlider { Minimum = (int)(-HAND_RANGE[i] * STEPS), Maximum = (int)(HAND_RANGE[i] * STEPS), SmallChange = 5, LargeChange = 50, Height = 28, Signed = true, LeftText = HAND_LEFT[i], RightText = HAND_RIGHT[i] };
             hand[i].Scroll += (s, e) => { ShowHand(ax); if (!syncing) HandChanged(); };
             handValue[i] = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Ink, Font = new Font("Consolas", 8.5f) };
             handPanel.Controls.Add(new SkinLabel { Text = HAND_WORDS[i], AutoSize = true, ForeColor = TimingUi.Dim, Tag = "w" + i });
@@ -295,7 +302,7 @@ class ClipsBox : FoldBox {
         clipLen.Text = string.Format("{0} rows in the file, {1} s long", clip.CsvFrames, edit.T.Length > 0 ? (edit.T[n - 1] + fr.Dt).ToString("0.00") : "?");
         syncing = true;
         var h = edit.HandAt(frame);
-        for (int i = 0; i < 6; i++) { hand[i].Value = (int)Math.Round(h[i] * STEPS); ShowHand(i); }
+        for (int i = 0; i < 6; i++) { hand[i].Value = (int)Math.Round(HandSign(i) * h[i] * STEPS); ShowHand(i); }
         foreach (var j in Rows.Joints.ToList()) Rows.Set(j, edit.JointAt(frame, j));
         foreach (var pr in partRows) { pr.S.Value = (int)Math.Round(edit.PartAt(frame, pr.Name) * 100 * PART_STEPS); ShowPart(pr); }
         syncing = false;
@@ -307,7 +314,7 @@ class ClipsBox : FoldBox {
     void HandChanged() {
         if (edit == null || frame >= edit.Frames.Count) return;
         var key = edit.KeyAtOrNew(edit.Frames[frame].Src);
-        key.Hand = hand.Select(s => s.Value / (double)STEPS).ToArray();
+        key.Hand = Enumerable.Range(0, 6).Select(i => HandSign(i) * hand[i].Value / (double)STEPS).ToArray();
         saveTimer.Stop(); saveTimer.Start();
         if (!holding) Hold(frame);
         ShowFrame();

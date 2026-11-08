@@ -43,11 +43,11 @@ class NudgeRows : SkinPanel {
 
     public double[] Get(string joint) {
         var r = rows.FirstOrDefault(x => x.Joint == joint);
-        return r == null ? null : r.Bars.Select(b => b.Value / (double)STEPS).ToArray();
+        return r == null ? null : Enumerable.Range(0, 3).Select(i => HandAxes.Sign(r.Joint, i) * r.Bars[i].Value / (double)STEPS).ToArray();
     }
     public Dictionary<string, double[]> All() {
         var d = new Dictionary<string, double[]>();
-        foreach (var r in rows) d[r.Joint] = r.Bars.Select(b => b.Value / (double)STEPS).ToArray();
+        foreach (var r in rows) d[r.Joint] = Get(r.Joint);
         return d;
     }
 
@@ -55,7 +55,7 @@ class NudgeRows : SkinPanel {
         var r = rows.FirstOrDefault(x => x.Joint == joint);
         if (r == null) return;
         syncing = true;
-        for (int i = 0; i < 3; i++) { r.Bars[i].Value = (int)Math.Round((xyz == null ? 0 : xyz[i]) * STEPS); ShowValue(r, i); }
+        for (int i = 0; i < 3; i++) { r.Bars[i].Value = (int)Math.Round(HandAxes.Sign(joint, i) * (xyz == null ? 0 : xyz[i]) * STEPS); ShowValue(r, i); }
         syncing = false;
     }
 
@@ -75,6 +75,10 @@ class NudgeRows : SkinPanel {
             r.Ticks[i] = new SkinCheckBox { Width = 24, Height = 24, Checked = isTicked(key), Tag = key };
             r.Ticks[i].CheckedChanged += (s, e) => setTicked(key, r.Ticks[ax].Checked);
             r.Bars[i] = new FancySlider { Minimum = (int)(-MAX_DEG * STEPS), Maximum = (int)(MAX_DEG * STEPS), SmallChange = 5, LargeChange = 50, Height = 28, Signed = true };
+            {   // 2026-11-08: the ends say what this axis does on this joint, the number shown turned round where + is on the wrong end (HandAxes.cs)
+                string lw, rw; bool fl;
+                if (HandAxes.Ends(joint, i, out lw, out rw, out fl)) { r.Bars[i].LeftText = lw; r.Bars[i].RightText = rw; }
+            }
             r.Bars[i].Scroll += (s, e) => { ShowValue(r, ax); if (!syncing && Changed != null) Changed(joint, Get(joint)); };
             r.Values[i] = new SkinLabel { AutoSize = true, ForeColor = Dim, Font = new Font("Consolas", 8.5f) };
             r.Panel.Controls.Add(new SkinLabel { Text = AXES[i], AutoSize = true, ForeColor = Dim, Tag = "ax" + i });
