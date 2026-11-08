@@ -342,6 +342,11 @@ end
 -- ---- the two files -----------------------------------------------------------------------------------------------------------
 
 local function read_command()
+    -- 2026-11-08: REFramework logs an error for every json.load_file of a missing file (seen ~30 a second in Village's log
+    -- with the window closed), so look for the file first
+    local probe = io.open(COMMAND_FILE, "r")
+    if not probe then return end
+    probe:close()
     local cmd = json.load_file(COMMAND_FILE)
     if type(cmd) ~= "table" or cmd.seq == nil or cmd.seq == last_seq then return end
     last_seq = cmd.seq
