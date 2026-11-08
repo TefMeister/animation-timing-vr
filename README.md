@@ -40,6 +40,8 @@ Three boxes, each folding away:
 
 Tick the box beside any slider and the controller steps it through Window View (X −1, Y −5, A +1, B +5; a held grip
 repeats), so a frame can be tuned from inside the headset.
+Only the helper window you clicked last answers the buttons (Hand Poser, Grip Zones, Gun Poser, Animation & Timing):
+a click anywhere in it is enough, so ticked boxes in the other windows stay still. Until one is clicked, all answer.
 
 ## Get it
 
