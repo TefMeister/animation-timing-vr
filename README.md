@@ -26,6 +26,9 @@ Three boxes, each folding away:
   **FASTER** retime the whole clip, **UNDO**, **RESET FRAMES**. The six **WHOLE HAND** sliders move and turn the hand on
   the gun at this frame (centimetres and degrees in the gun's own axes); **FINGERS** rows turn the clip's joints. Any
   slider moved on a held frame becomes a key on that frame; the mod fades between keys and the hand moves as you drag.
+  Tick **COPY ON +1** and each **+1 ▶** carries this frame's pose (whole hand and fingers) onto the next frame as its
+  key, so you can walk forward and only fix what changes. It works on **+1** only: **−1** never copies, and a frame
+  that already has its own key is left as it was.
 - **TIMINGS** (only with Visceral RE8): the mod's named seconds, one slider each with its meaning in words (the cover
   swing, the drum turn, the hammer press, the case slide...). A change reaches the mod within half a second; **RESET**
   goes back to the built-in number.

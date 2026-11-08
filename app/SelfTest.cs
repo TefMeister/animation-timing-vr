@@ -79,6 +79,19 @@ static class SelfTest {
         ed2.Undo();
         Check(ed2.Frames.Count == 5, "undo again: back to the raw five frames");
 
+        // ---- COPY ON +1 (Tefa 2026-11-08): this frame's pose becomes the next frame's key, forward only, never over a key -------
+        ed2.CopyForward(2, null);
+        var c3 = ed2.KeyAt(3);
+        Check(c3 != null && c3.Hand != null && Near(c3.Hand[4], 12) && Near(c3.Hand[0], 1.5) && c3.Joints.ContainsKey("L_IndexF1") && Near(c3.Joints["L_IndexF1"][2], 20), "copy on +1: frame 3 gets frame 2's whole hand and its finger turn");
+        c3.Hand[4] = 5;
+        string again = ed2.CopyForward(2, null);
+        Check(Near(ed2.KeyAt(3).Hand[4], 5) && again.Contains("already has its own key"), "copy on +1 never overwrites a key already on the next frame");
+        Check(ed2.CopyForward(4, null).StartsWith("last frame") && ed2.Nudges.Count == 2, "copy on +1 from the last frame does nothing");
+        var bare = new ClipEdit(new ClipInfo { Gun = "x", Event = "bare", RawT = { 0, 0.1, 0.2 } }, null);
+        Check(bare.CopyForward(0, new[] { "L_Thumb1" }).Contains("nothing to copy") && bare.Nudges.Count == 0, "copy on +1 with no changes anywhere makes no key");
+        bare.Hold(0, 1);
+        Check(bare.CopyForward(0, null).Contains("same row") && bare.Nudges.Count == 0, "copy on +1 onto an added copy of the same row: nothing to do");
+
         // ---- clips_state.json as the plugin writes it ----------------------------------------------------------------------------
         File.WriteAllText(Path.Combine(clipsDir, "clips_state.json"),
             "{\"gun\":\"ri3008\",\"relative\":true,\"clips\":[\n  {\"event\":\"round_in\",\"hands\":\"left\",\"csv_frames\":5,\"frames\":5,\"seconds\":0.4,\"joints\":[\"L_IndexF1\"],\"raw_t\":[0,0.1,0.2,0.3,0.4],\"src\":[0,1,2,3,4],\"t\":[0,0.1,0.2,0.3,0.4]}],\"playing\":[{\"event\":\"round_in\",\"key\":\"ri3008_round_in\",\"hand\":\"left\",\"frame\":2.00,\"held\":true,\"blend\":1.00}]}\n");
