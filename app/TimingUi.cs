@@ -18,6 +18,8 @@ class TimingUi : Form {
     public readonly GameLink Link = new GameLink();
     readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer(), sendTimer = new System.Windows.Forms.Timer(), nudgeTimer = new System.Windows.Forms.Timer();
     readonly Nudge nudge = new Nudge();
+    // 2026-11-08: the boxes name their parts (a joint's row, the whole hand, a gun part) so the buttons reach the one clicked last
+    internal static Action<Control, string> NameSection;
     readonly HashSet<string> ticked = new HashSet<string>();
     DateTime lastFind = DateTime.MinValue;
 
@@ -55,6 +57,7 @@ class TimingUi : Form {
         Controls.Add(body);
         body.BringToFront();
         timings = new TimingsBox(this, Btn, settings.Get("open_timings", "1") == "1");
+        NameSection = (c, n) => nudge.Section(c, n);
         clips = new ClipsBox(this, Btn, settings.Get("open_clips", "1") == "1");
         playing = new PlayingBox(this, Btn, settings.Get("open_playing", "1") == "1");
         // docked Top: the last added sits highest
@@ -188,7 +191,8 @@ class TimingUi : Form {
         bool started;
         double n = nudge.Poll(ticked.Count > 0, out started);
         if (n == 0) return;
-        bool any = playing.Rows.Step(n, ticked) | clips.Step(n, ticked);
+        var use = nudge.Filter(ticked);   // 2026-11-08: only the part clicked last, when it has ticks (Nudge.cs)
+        bool any = playing.Rows.Step(n, use) | clips.Step(n, use);
         if (!any) return;
     }
 

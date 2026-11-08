@@ -89,6 +89,7 @@ class ClipsBox : FoldBox {
 
         // the whole hand: two columns of three, like Hand Poser's docked-wrist box
         var handPanel = new SkinPanel { Height = 150, Tint = Color.FromArgb(40, 30, 34, 50) };
+        if (TimingUi.NameSection != null) TimingUi.NameSection(handPanel, "clip:hand");
         handPanel.Controls.Add(new SkinLabel { Text = "WHOLE HAND ON THE GUN, at this frame (the gun's own axes)", AutoSize = true, ForeColor = TimingUi.Dim, Font = new Font("Segoe UI Semibold", 9f), Location = new Point(4, 2) });
         for (int i = 0; i < 6; i++) {
             int ax = i;
@@ -160,7 +161,8 @@ class ClipsBox : FoldBox {
             var pr = new PartRow { Name = name };
             var row = TimingUi.Row(PART_ROW_H - 2);
             string key = "clip:part:" + name;
-            pr.Tick = new SkinCheckBox { Width = 24, Height = 24, Checked = ui.IsTicked(key) };
+            pr.Tick = new SkinCheckBox { Width = 24, Height = 24, Checked = ui.IsTicked(key), Tag = key };
+            if (TimingUi.NameSection != null) TimingUi.NameSection(row, key);
             pr.Tick.CheckedChanged += (s, e) => ui.SetTicked(key, pr.Tick.Checked);
             row.Controls.Add(pr.Tick);
             row.Controls.Add(new SkinLabel { Text = name.ToUpperInvariant() + ": how far round (100 % = one chamber)", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(2, 6, 4, 0) });

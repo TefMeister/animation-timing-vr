@@ -63,6 +63,7 @@ class NudgeRows : SkinPanel {
         if (Has(joint)) return;
         var r = new Row { Joint = joint };
         r.Panel = new SkinPanel { Height = 34, Tint = Color.FromArgb(40, 30, 34, 50) };
+        if (TimingUi.NameSection != null) TimingUi.NameSection(r.Panel, "rows:" + tag + ":" + joint);
         var cross = new SkinButton { Text = "✕", Width = 26, Height = 24, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(70, 50, 56), ForeColor = Ink, Location = new Point(4, 5) };
         cross.FlatAppearance.BorderSize = 0;
         cross.Click += (s, e) => Remove(joint);
