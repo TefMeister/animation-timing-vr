@@ -87,6 +87,12 @@ static class SelfTest {
         string again = ed2.CopyForward(2, null);
         Check(Near(ed2.KeyAt(3).Hand[4], 5) && again.Contains("already has its own key"), "copy on +1 never overwrites a key already on the next frame");
         Check(ed2.CopyForward(4, null).StartsWith("last frame") && ed2.Nudges.Count == 2, "copy on +1 from the last frame does nothing");
+        ed2.CopyStep(2, -1, null);
+        var c1 = ed2.KeyAt(1);
+        Check(c1 != null && Near(c1.Hand[4], 12) && Near(c1.Joints["L_IndexF1"][2], 20), "copy on −1: frame 1 gets frame 2's whole hand and its finger turn");
+        Check(ed2.CopyStep(2, -1, null).Contains("already has its own key") && Near(ed2.KeyAt(1).Hand[4], 12), "copy on −1 never overwrites a key already on the frame before");
+        Check(ed2.CopyStep(0, -1, null).StartsWith("first frame") && ed2.Nudges.Count == 3, "copy on −1 from the first frame does nothing");
+        Check(ed2.CopyStep(2, 3, null).Contains("one step only") && ed2.Nudges.Count == 3, "a copy is never more than one step");
         var bare = new ClipEdit(new ClipInfo { Gun = "x", Event = "bare", RawT = { 0, 0.1, 0.2 } }, null);
         Check(bare.CopyForward(0, new[] { "L_Thumb1" }).Contains("nothing to copy") && bare.Nudges.Count == 0, "copy on +1 with no changes anywhere makes no key");
         bare.Hold(0, 1);

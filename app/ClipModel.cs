@@ -159,12 +159,14 @@ class ClipEdit {
 
     public double[] HandAt(int k) { return ClipMath.At(Frames, T, Nudges, k, key => key.Hand, 6); }
     public double[] JointAt(int k, string joint) { return ClipMath.At(Frames, T, Nudges, k, key => { double[] v; return key.Joints.TryGetValue(joint, out v) ? v : null; }, 3); }
-    // COPY ON +1 (Tefa 2026-11-08): the pose shown on edited frame `from` (whole hand + every finger any key touches, plus the
-    // open rows) becomes the key of frame from+1. Only ever forward by one, and never over a key already there (stepping back
-    // to fix a frame and forward again must not wipe the next one). Returns a short note for the window.
-    public string CopyForward(int from, IEnumerable<string> openRows) {
-        int to = from + 1;
-        if (from < 0 || to >= Frames.Count) return "last frame: nothing to copy onto";
+    // COPY ON +1 / COPY ON −1 (Tefa 2026-11-08): the pose shown on edited frame `from` (whole hand + every finger any key
+    // touches, plus the open rows) becomes the key of the neighbouring frame, one step only (dir +1 or −1), and never over a
+    // key already there (stepping one way to fix a frame and back must not wipe it). Returns a short note for the window.
+    public string CopyForward(int from, IEnumerable<string> openRows) { return CopyStep(from, +1, openRows); }
+    public string CopyStep(int from, int dir, IEnumerable<string> openRows) {
+        if (dir != 1 && dir != -1) return "copy: one step only";
+        int to = from + dir;
+        if (from < 0 || from >= Frames.Count || to < 0 || to >= Frames.Count) return (dir > 0 ? "last" : "first") + " frame: nothing to copy onto";
         int src = Frames[to].Src;
         if (src == Frames[from].Src) return "frame " + to + " is an added copy of the same row: already the same pose";
         if (KeyAt(src) != null) return "frame " + to + " already has its own key: left as it was";

@@ -17,11 +17,11 @@ class ClipsBox : FoldBox {
     static readonly string[] HAND_WORDS = { "right / left (x)", "up / down (y)", "forward / back (z)", "tilt (rx)", "turn (ry)", "roll (rz)" };
     static readonly string[] HAND_UNIT = { "cm", "cm", "cm", "°", "°", "°" };
     readonly TimingUi ui;
-    readonly Label where, frameLabel, keysNote, playingNote;
+    readonly Label where, frameLabel, keysNote, playingNote, clipLen;
     readonly ComboBox clipPick;
     readonly RadioButton handL, handR, handBoth;
     readonly Button hold;
-    readonly CheckBox copyFwd;   // COPY ON +1: the +1 button carries this frame's pose onto the next (only +1; −1 never copies)
+    readonly CheckBox copyFwd, copyBack;   // COPY ON +1 / COPY ON −1: that button carries this frame's pose onto the frame it steps to
     string copyNote;
     readonly FancySlider[] hand = new FancySlider[6];
     readonly Label[] handValue = new Label[6];
@@ -57,9 +57,11 @@ class ClipsBox : FoldBox {
         ctl.Controls.Add(btn("PLAY ONCE", (s, e) => PlayOnce(), 0));
         hold = btn("HOLD A FRAME", (s, e) => { if (holding) LetGo(); else Hold(frame); }, 130);
         ctl.Controls.Add(hold);
-        ctl.Controls.Add(btn("◀ −1", (s, e) => { copyNote = null; Hold(frame - 1); }, 60));
-        ctl.Controls.Add(btn("+1 ▶", (s, e) => PlusOne(), 60));
+        ctl.Controls.Add(btn("◀ −1", (s, e) => StepCopy(-1), 60));
+        ctl.Controls.Add(btn("+1 ▶", (s, e) => StepCopy(+1), 60));
         copyFwd = new SkinCheckBox { Text = "COPY ON +1", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(2, 4, 0, 0) };
+        copyBack = new SkinCheckBox { Text = "COPY ON −1", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(2, 4, 0, 0) };
+        ctl.Controls.Add(copyBack);
         ctl.Controls.Add(copyFwd);
         frameLabel = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Ink, Font = new Font("Consolas", 9.5f), Padding = new Padding(8, 6, 8, 0) };
         ctl.Controls.Add(frameLabel);
@@ -73,6 +75,8 @@ class ClipsBox : FoldBox {
         ed.Controls.Add(btn("FASTER", (s, e) => Op(x => x.Speed(0, x.Frames.Count - 1, 1.25)), 0));
         ed.Controls.Add(btn("UNDO", (s, e) => Op(x => x.Undo()), 60));
         ed.Controls.Add(btn("RESET FRAMES", (s, e) => Op(x => { x.Ops.Clear(); x.Recompute(); }), 0));
+        clipLen = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Dim, Padding = new Padding(8, 6, 0, 0) };
+        ed.Controls.Add(clipLen);
         Controls.Add(ed);
 
         // the whole hand: two columns of three, like Hand Poser's docked-wrist box
@@ -196,14 +200,16 @@ class ClipsBox : FoldBox {
         Scrub(true, frame);
         ShowFrame();
     }
-    void PlusOne() {
+    // the −1 / +1 buttons only (never a typed frame or a pick): with that direction's box ticked, copy the pose one step first
+    void StepCopy(int dir) {
         copyNote = null;
-        if (copyFwd.Checked && edit != null && frame + 1 < edit.Frames.Count) {
-            copyNote = edit.CopyForward(frame, Rows.Joints);
+        bool on = dir > 0 ? copyFwd.Checked : copyBack.Checked;
+        if (on && edit != null && frame + dir >= 0 && frame + dir < edit.Frames.Count) {
+            copyNote = edit.CopyStep(frame, dir, Rows.Joints);
             saveTimer.Stop();
             try { edit.Save(); } catch (IOException) { saveTimer.Start(); }
         }
-        Hold(frame + 1);
+        Hold(frame + dir);
     }
     public void LetGo() {
         if (!holding) return;
@@ -229,7 +235,8 @@ class ClipsBox : FoldBox {
         frame = Math.Max(0, Math.Min(n - 1, frame));
         var fr = edit.Frames[frame];
         bool keyed = edit.KeyAt(fr.Src) != null;
-        frameLabel.Text = string.Format("frame {0}/{1}  t {2:0.000} s  row {3}{4}  ({5} in the file, {6} s)", frame, n - 1, edit.T[frame], fr.Src, keyed ? "  KEY" : "", clip.CsvFrames, edit.T.Length > 0 ? (edit.T[n - 1] + fr.Dt).ToString("0.00") : "?");
+        frameLabel.Text = string.Format("frame {0}/{1}  {2:0.000} s  row {3}{4}", frame, n - 1, edit.T[frame], fr.Src, keyed ? "  KEY" : "");
+        clipLen.Text = string.Format("{0} rows in the file, {1} s long", clip.CsvFrames, edit.T.Length > 0 ? (edit.T[n - 1] + fr.Dt).ToString("0.00") : "?");
         syncing = true;
         var h = edit.HandAt(frame);
         for (int i = 0; i < 6; i++) { hand[i].Value = (int)Math.Round(h[i] * STEPS); ShowHand(i); }
