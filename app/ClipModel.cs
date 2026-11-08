@@ -75,12 +75,38 @@ static class ClipMath {
         for (int i = 0; i < width; i++) out_[i] = a[i] + (b[i] - a[i]) * u;
         return out_;
     }
+
+    // 2026-11-08 (Tefa: the drum must travel frame by frame with the hand): a gun part's progress at edited frame k: the keyed
+    // frames' values along the edited time, 0 at the first frame and 1 at the last where those carry no key, straight between
+    // (the plugin's rule exactly: visceral-re8-vr src/shellclip.cpp part_at)
+    public static double PartAt(List<Frame> f, double[] t, IList<NudgeKey> keys, string part, int k) {
+        if (f.Count == 0) return 0;
+        var bySrc = new Dictionary<int, double>();
+        if (keys != null) foreach (var key in keys) { double v; if (key.Parts.TryGetValue(part, out v)) bySrc[key.Src] = v; }
+        var pts = new List<double[]>();
+        for (int i = 0; i < f.Count; i++) {
+            double v;
+            if (bySrc.TryGetValue(f[i].Src, out v)) pts.Add(new[] { t[i], v });
+            else if (i == 0) pts.Add(new[] { t[0], 0.0 });
+            else if (i == f.Count - 1) pts.Add(new[] { t[i], 1.0 });
+        }
+        double time = t[Math.Max(0, Math.Min(f.Count - 1, k))];
+        if (time <= pts[0][0]) return pts[0][1];
+        for (int i = 1; i < pts.Count; i++) {
+            if (time > pts[i][0]) continue;
+            double span = pts[i][0] - pts[i - 1][0];
+            double u = span > 0 ? (time - pts[i - 1][0]) / span : 1;
+            return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u;
+        }
+        return pts[pts.Count - 1][1];
+    }
 }
 
 class NudgeKey {
     public int Src;
     public Dictionary<string, double[]> Joints = new Dictionary<string, double[]>();   // name -> x, y, z degrees
     public double[] Hand;                                                              // x, y, z cm, rx, ry, rz deg; null = none
+    public Dictionary<string, double> Parts = new Dictionary<string, double>();        // 2026-11-08: gun part -> progress (1 = one chamber)
 }
 
 // one clip as the plugin describes it, plus its edit file
@@ -88,6 +114,7 @@ class ClipInfo {
     public string Gun, Event, Hands;
     public int CsvFrames;
     public List<string> Joints = new List<string>();
+    public List<string> Parts = new List<string>();     // 2026-11-08: the gun parts that move with it (the drum), from the plugin
     public List<double> RawT = new List<double>();
     public List<int> Src = new List<int>();        // as the plugin has it (its edited list)
     public List<double> T = new List<double>();
@@ -99,6 +126,7 @@ class ClipInfo {
         c.CsvFrames = (int)Json.Num(d.ContainsKey("csv_frames") ? d["csv_frames"] : null, 0);
         c.Seconds = Json.Num(d.ContainsKey("seconds") ? d["seconds"] : null, 0);
         if (d.ContainsKey("joints")) foreach (var j in Json.Arr(d["joints"]) ?? new List<object>()) c.Joints.Add(Json.Str(j));
+        if (d.ContainsKey("parts")) foreach (var j in Json.Arr(d["parts"]) ?? new List<object>()) c.Parts.Add(Json.Str(j));
         if (d.ContainsKey("raw_t")) foreach (var x in Json.Arr(d["raw_t"]) ?? new List<object>()) c.RawT.Add(Json.Num(x, 0));
         if (d.ContainsKey("src")) foreach (var x in Json.Arr(d["src"]) ?? new List<object>()) c.Src.Add((int)Json.Num(x, 0));
         if (d.ContainsKey("t")) foreach (var x in Json.Arr(d["t"]) ?? new List<object>()) c.T.Add(Json.Num(x, 0));
@@ -137,6 +165,8 @@ class ClipEdit {
                         if (js != null) foreach (var kv in js) { var a = Json.Arr(kv.Value); if (a != null && a.Count == 3) key.Joints[kv.Key] = a.Select(x => Json.Num(x, 0)).ToArray(); }
                         var h = k.ContainsKey("hand") ? Json.Arr(k["hand"]) : null;
                         if (h != null && h.Count == 6) key.Hand = h.Select(x => Json.Num(x, 0)).ToArray();
+                        var ps = k.ContainsKey("parts") ? Json.Obj(k["parts"]) : null;
+                        if (ps != null) foreach (var kv in ps) if (kv.Value is double) key.Parts[kv.Key] = (double)kv.Value;
                         Nudges.Add(key);
                     }
                 }
@@ -158,9 +188,12 @@ class ClipEdit {
     }
 
     public double[] HandAt(int k) { return ClipMath.At(Frames, T, Nudges, k, key => key.Hand, 6); }
+    public double PartAt(int k, string part) { return ClipMath.PartAt(Frames, T, Nudges, part, k); }
+    public bool PartKeyed(int k, string part) { var key = k >= 0 && k < Frames.Count ? KeyAt(Frames[k].Src) : null; return key != null && key.Parts.ContainsKey(part); }
+    public void PartsStraight(string part) { foreach (var key in Nudges) key.Parts.Remove(part); }
     public double[] JointAt(int k, string joint) { return ClipMath.At(Frames, T, Nudges, k, key => { double[] v; return key.Joints.TryGetValue(joint, out v) ? v : null; }, 3); }
     // COPY ON +1 / COPY ON −1 (Tefa 2026-11-08): the pose shown on edited frame `from` (whole hand + every finger any key
-    // touches, plus the open rows) becomes the key of the neighbouring frame, one step only (dir +1 or −1), and never over a
+    // touches, plus the open rows; NOT the gun parts: a copied drum would stand still) becomes the key of the neighbouring frame, one step only (dir +1 or −1), and never over a
     // key already there (stepping one way to fix a frame and back must not wipe it). Returns a short note for the window.
     public string CopyForward(int from, IEnumerable<string> openRows) { return CopyStep(from, +1, openRows); }
     public string CopyStep(int from, int dir, IEnumerable<string> openRows) {
@@ -193,13 +226,14 @@ class ClipEdit {
         d["ops"] = Ops;
         var nl = new List<object>();
         foreach (var k in Nudges) {
-            if (k.Joints.Count == 0 && k.Hand == null) continue;
+            if (k.Joints.Count == 0 && k.Hand == null && k.Parts.Count == 0) continue;
             var e = new Dictionary<string, object>();
             e["src"] = (double)k.Src;
             var js = new Dictionary<string, object>();
             foreach (var kv in k.Joints) if (kv.Value.Any(x => Math.Abs(x) > 1e-6)) js[kv.Key] = kv.Value.Select(x => (object)Math.Round(x, 2)).ToList();
             e["joints"] = js;
             if (k.Hand != null) e["hand"] = k.Hand.Select(x => (object)Math.Round(x, 3)).ToList();
+            if (k.Parts.Count > 0) { var ps = new Dictionary<string, object>(); foreach (var kv in k.Parts) ps[kv.Key] = Math.Round(kv.Value, 4); e["parts"] = ps; }
             nl.Add(e);
         }
         d["nudges"] = nl;

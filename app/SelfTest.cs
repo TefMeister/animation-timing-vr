@@ -93,6 +93,23 @@ static class SelfTest {
         Check(ed2.CopyStep(2, -1, null).Contains("already has its own key") && Near(ed2.KeyAt(1).Hand[4], 12), "copy on −1 never overwrites a key already on the frame before");
         Check(ed2.CopyStep(0, -1, null).StartsWith("first frame") && ed2.Nudges.Count == 3, "copy on −1 from the first frame does nothing");
         Check(ed2.CopyStep(2, 3, null).Contains("one step only") && ed2.Nudges.Count == 3, "a copy is never more than one step");
+
+        // ---- GUN PARTS (Tefa 2026-11-08: the drum travels frame by frame with the hand) -----------------------------------------
+        var pf = ClipMath.Apply(raw, null); var pt = ClipMath.Times(pf);   // five frames, 0.1 s apart, the last at 0.4 s
+        var none = new List<NudgeKey>();
+        Check(Near(ClipMath.PartAt(pf, pt, none, "drum", 0), 0) && Near(ClipMath.PartAt(pf, pt, none, "drum", 2), 0.5) && Near(ClipMath.PartAt(pf, pt, none, "drum", 4), 1), "drum with no keys: 0 at the first frame, half way at the middle, 1 at the last");
+        var pk = new List<NudgeKey> { new NudgeKey { Src = 1, Parts = { { "drum", 0.8 } } }, new NudgeKey { Src = 2, Hand = new double[6] } };
+        Check(Near(ClipMath.PartAt(pf, pt, pk, "drum", 1), 0.8) && Near(ClipMath.PartAt(pf, pt, pk, "drum", 2), 0.8 + 0.2 / 3) && Near(ClipMath.PartAt(pf, pt, pk, "drum", 4), 1), "drum keyed 80 % on frame 1: there, then straight on to 100 % at the end (a hand-only key does not bend it)");
+        var pslow = ClipMath.Apply(raw, new List<object> { Op("hold", "i", 0, "n", 4) }); var pts2 = ClipMath.Times(pslow);
+        Check(Near(ClipMath.PartAt(pslow, pts2, none, "drum", 4), 0.5), "drum after ADD ONE HERE x4 on frame 0: it follows the new timing (half way at 0.4 s of 0.8 s)");
+        ed2.KeyAtOrNew(ed2.Frames[3].Src).Parts["drum"] = 0.25;
+        ed2.Save();
+        var ed3 = new ClipEdit(info, clipsDir);
+        Check(ed3.PartKeyed(3, "drum") && Near(ed3.PartAt(3, "drum"), 0.25), "drum key saved and read back from the edit file");
+        string note = ed3.CopyStep(3, +1, null);
+        Check(!ed3.PartKeyed(4, "drum") && Near(ed3.PartAt(4, "drum"), 1), "copy on +1 carries the hand, never the drum (a copied drum would stand still): " + note);
+        ed3.PartsStraight("drum");
+        Check(!ed3.PartKeyed(3, "drum") && Near(ed3.PartAt(2, "drum"), 0.5), "STRAIGHT AGAIN: the drum's keys gone, back to the even turn");
         var bare = new ClipEdit(new ClipInfo { Gun = "x", Event = "bare", RawT = { 0, 0.1, 0.2 } }, null);
         Check(bare.CopyForward(0, new[] { "L_Thumb1" }).Contains("nothing to copy") && bare.Nudges.Count == 0, "copy on +1 with no changes anywhere makes no key");
         bare.Hold(0, 1);
@@ -100,9 +117,10 @@ static class SelfTest {
 
         // ---- clips_state.json as the plugin writes it ----------------------------------------------------------------------------
         File.WriteAllText(Path.Combine(clipsDir, "clips_state.json"),
-            "{\"gun\":\"ri3008\",\"relative\":true,\"clips\":[\n  {\"event\":\"round_in\",\"hands\":\"left\",\"csv_frames\":5,\"frames\":5,\"seconds\":0.4,\"joints\":[\"L_IndexF1\"],\"raw_t\":[0,0.1,0.2,0.3,0.4],\"src\":[0,1,2,3,4],\"t\":[0,0.1,0.2,0.3,0.4]}],\"playing\":[{\"event\":\"round_in\",\"key\":\"ri3008_round_in\",\"hand\":\"left\",\"frame\":2.00,\"held\":true,\"blend\":1.00}]}\n");
+            "{\"gun\":\"ri3008\",\"relative\":true,\"clips\":[\n  {\"event\":\"round_in\",\"hands\":\"left\",\"csv_frames\":5,\"frames\":5,\"seconds\":0.4,\"joints\":[\"L_IndexF1\"],\"raw_t\":[0,0.1,0.2,0.3,0.4],\"src\":[0,1,2,3,4],\"t\":[0,0.1,0.2,0.3,0.4],\"parts\":[\"drum\"]}],\"playing\":[{\"event\":\"round_in\",\"key\":\"ri3008_round_in\",\"hand\":\"left\",\"frame\":2.00,\"held\":true,\"blend\":1.00}]}\n");
         var st = ClipsState.Read(clipsDir);
         Check(st.Gun == "ri3008" && st.Relative && st.Clips.Count == 1 && st.Clips[0].RawT.Count == 5 && st.Playing.Count == 1, "clips_state.json read: gun, one clip with raw times, one play");
+        Check(st.Clips[0].Parts.SequenceEqual(new[] { "drum" }), "clips_state.json read: the clip's gun parts (the drum)");
 
         // ---- JSON --------------------------------------------------------------------------------------------------------------
         var d = new Dictionary<string, object>(); d["seq"] = 3.0; d["freeze"] = true; d["nudge_live"] = new Dictionary<string, object> { { "L_Hand", new List<object> { 1.5, -2.0, 0.0 } } };

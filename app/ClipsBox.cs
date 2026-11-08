@@ -11,8 +11,8 @@ using System.Linq;
 using System.Windows.Forms;
 
 class ClipsBox : FoldBox {
-    const int BASE_H = 375, SAVE_DEBOUNCE_MS = 120, STEPS = 10;
-    Control[] stack;
+    const int BASE_H = 375, SAVE_DEBOUNCE_MS = 120, STEPS = 10, PART_STEPS = 10, PART_ROW_H = 34;   // PART_STEPS: slider steps per percent
+    Control pickRow, ctlRow, edRow, handBox, quickRow, keysRow;
     static readonly double[] HAND_RANGE = { 15, 15, 15, 180, 180, 180 };
     static readonly string[] HAND_WORDS = { "right / left (x)", "up / down (y)", "forward / back (z)", "tilt (rx)", "turn (ry)", "roll (rz)" };
     static readonly string[] HAND_UNIT = { "cm", "cm", "cm", "°", "°", "°" };
@@ -28,6 +28,13 @@ class ClipsBox : FoldBox {
     readonly CheckBox[] handTick = new CheckBox[6];
     readonly System.Windows.Forms.Timer saveTimer = new System.Windows.Forms.Timer();
     public readonly NudgeRows Rows;
+    // 2026-11-08 (Tefa: "only half of the solution if the drum doesn't travel frame by frame as well"): GUN PARTS, one slider per
+    // part that moves with this clip (the Wolfsbane's drum): how far it has gone at this frame, 100 % = one chamber; moved on a
+    // held frame it becomes a key; STRAIGHT AGAIN takes this part's keys off (back to an even 0 -> 100 % over the clip)
+    class PartRow { public string Name; public FancySlider S; public Label V; public CheckBox Tick; }
+    readonly FlowLayoutPanel partsPanel;
+    readonly List<PartRow> partRows = new List<PartRow>();
+    readonly Func<string, EventHandler, int, Button> mkBtn;
     ClipsState state = new ClipsState();
     ClipInfo clip;
     ClipEdit edit;
@@ -38,6 +45,7 @@ class ClipsBox : FoldBox {
 
     public ClipsBox(TimingUi ui, Func<string, EventHandler, int, Button> btn, bool startOpen) : base("OUR CLIPS (Visceral RE8)", btn, startOpen, BASE_H) {
         this.ui = ui;
+        mkBtn = btn;
         where = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Dim, Location = new Point(250, 9), Tag = "header" };
         Controls.Add(where);
         var pick = TimingUi.Row(32);
@@ -106,6 +114,8 @@ class ClipsBox : FoldBox {
             }
         };
         Controls.Add(handPanel);
+        partsPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Color.Transparent, Height = 0, Visible = false };
+        Controls.Add(partsPanel);
 
         var quick = TimingUi.Row(32);
         quick.Controls.Add(new SkinLabel { Text = "FINGERS:", AutoSize = true, ForeColor = TimingUi.Dim, Font = new Font("Segoe UI Semibold", 9f), Padding = new Padding(0, 6, 4, 0) });
@@ -127,15 +137,58 @@ class ClipsBox : FoldBox {
         Controls.Add(keys);
 
         saveTimer.Interval = SAVE_DEBOUNCE_MS; saveTimer.Tick += (s, e) => { saveTimer.Stop(); if (edit != null) { try { edit.Save(); } catch (IOException) { saveTimer.Start(); } } };
-        stack = new Control[] { pick, ctl, ed, handPanel, quick, Rows, keys };
+        pickRow = pick; ctlRow = ctl; edRow = ed; handBox = handPanel; quickRow = quick; keysRow = keys;
         Layout += (s, e) => DoLayout();
         SetOpen(open);
         Relayout();
     }
 
-    void Relayout() { Grow(BASE_H + Rows.Height); PerformLayout(); }
+    void Relayout() { Grow(BASE_H + Rows.Height + (partRows.Count > 0 ? partsPanel.Height + 2 : 0)); PerformLayout(); }
 
-    void DoLayout() { Stack(stack); }
+    void DoLayout() {
+        Stack(new[] { pickRow, ctlRow, edRow, handBox, partRows.Count > 0 ? partsPanel : null, quickRow, Rows, keysRow });
+        if (partRows.Count == 0) partsPanel.Visible = false;
+        foreach (var pr in partRows) pr.S.Width = Math.Max(120, partsPanel.ClientSize.Width - 600);
+    }
+
+    // ---- the gun parts (2026-11-08) ------------------------------------------------------------------------------------------------
+    void RebuildParts() {
+        var want = clip == null ? new List<string>() : clip.Parts;
+        if (want.SequenceEqual(partRows.Select(r => r.Name))) return;
+        partsPanel.Controls.Clear(); partRows.Clear();
+        foreach (var name in want) {
+            var pr = new PartRow { Name = name };
+            var row = TimingUi.Row(PART_ROW_H - 2);
+            string key = "clip:part:" + name;
+            pr.Tick = new SkinCheckBox { Width = 24, Height = 24, Checked = ui.IsTicked(key) };
+            pr.Tick.CheckedChanged += (s, e) => ui.SetTicked(key, pr.Tick.Checked);
+            row.Controls.Add(pr.Tick);
+            row.Controls.Add(new SkinLabel { Text = name.ToUpperInvariant() + ": how far round (100 % = one chamber)", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(2, 6, 4, 0) });
+            pr.S = new FancySlider { Minimum = -25 * PART_STEPS, Maximum = 125 * PART_STEPS, SmallChange = 5, LargeChange = 50, Height = 28, Width = 300 };
+            pr.S.Scroll += (s, e) => { ShowPart(pr); if (!syncing) PartChanged(pr); };
+            row.Controls.Add(pr.S);
+            pr.V = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Ink, Font = new Font("Consolas", 8.5f), Padding = new Padding(4, 7, 4, 0), MinimumSize = new Size(86, 0) };
+            row.Controls.Add(pr.V);
+            row.Controls.Add(mkBtn("STRAIGHT AGAIN", (s, e) => { if (edit == null) return; edit.PartsStraight(pr.Name); try { edit.Save(); } catch (IOException) { saveTimer.Start(); } ShowFrame(); }, 0));
+            row.Width = 2000;
+            partsPanel.Controls.Add(row);
+            partRows.Add(pr);
+        }
+        partsPanel.Height = partRows.Count * PART_ROW_H;
+        Relayout();
+    }
+    void ShowPart(PartRow pr) {
+        bool keyed = edit != null && edit.PartKeyed(frame, pr.Name);
+        pr.V.Text = string.Format("{0:0.0} %{1}", pr.S.Value / (double)PART_STEPS, keyed ? "  KEY" : "");
+    }
+    void PartChanged(PartRow pr) {
+        if (edit == null || frame >= edit.Frames.Count) return;
+        var key = edit.KeyAtOrNew(edit.Frames[frame].Src);
+        key.Parts[pr.Name] = pr.S.Value / (100.0 * PART_STEPS);
+        saveTimer.Stop(); saveTimer.Start();
+        if (!holding) Hold(frame);
+        ShowFrame();
+    }
 
     public void FolderChanged() { present = ui.Link.HasVisceral; Visible = present; state = new ClipsState(); clip = null; edit = null; clipPick.Items.Clear(); }
 
@@ -162,7 +215,7 @@ class ClipsBox : FoldBox {
             if (keep != null && events.Contains(keep)) clipPick.SelectedItem = keep; else if (events.Count > 0) clipPick.SelectedIndex = 0;
         } else if (clip != null) {   // the same clip, maybe re-edited by the plugin's reading of our file: keep our edit model, refresh its times
             var fresh = st.Clips.FirstOrDefault(c => c.Event == clip.Event);
-            if (fresh != null) { clip = fresh; if (edit != null && clip.RawT.Count > 0) edit.Recompute(); ShowFrame(); }
+            if (fresh != null) { clip = fresh; RebuildParts(); if (edit != null && clip.RawT.Count > 0) edit.Recompute(); ShowFrame(); }
         }
         var pl = st.Playing.Where(p => clip != null && Json.Str(p["key"]) == clip.Key).ToList();
         playingNote.Text = pl.Count == 0 ? "" : string.Join("  ", pl.Select(p => string.Format("{0} hand: frame {1:0.0}{2}", Json.Str(p["hand"]), Json.Num(p["frame"], 0), Json.Bool(p["held"]) ? " HELD" : "")).ToArray());
@@ -180,6 +233,7 @@ class ClipsBox : FoldBox {
         handL.Enabled = c.Hands != "right"; handR.Enabled = c.Hands != "left"; handBoth.Enabled = c.Hands == "both";
         if (c.Hands == "left") handL.Checked = true; else if (c.Hands == "right") handR.Checked = true; else handBoth.Checked = true;
         Rows.Clear();
+        RebuildParts();
         ShowFrame();
     }
 
@@ -241,6 +295,7 @@ class ClipsBox : FoldBox {
         var h = edit.HandAt(frame);
         for (int i = 0; i < 6; i++) { hand[i].Value = (int)Math.Round(h[i] * STEPS); ShowHand(i); }
         foreach (var j in Rows.Joints.ToList()) Rows.Set(j, edit.JointAt(frame, j));
+        foreach (var pr in partRows) { pr.S.Value = (int)Math.Round(edit.PartAt(frame, pr.Name) * 100 * PART_STEPS); ShowPart(pr); }
         syncing = false;
         var kf = edit.KeyedFrames();
         keysNote.Text = (copyNote != null ? copyNote + "  ·  " : "") + (kf.Length == 0 ? "no keys yet: move a slider on a held frame to make one" : "keys on frames: " + string.Join(", ", kf.Select(x => x.ToString()).ToArray()) + "  (" + edit.Ops.Count + " frame edit(s))");
@@ -278,6 +333,12 @@ class ClipsBox : FoldBox {
             any = true;
         }
         if (any) HandChanged();
+        foreach (var pr in partRows) {   // a gun part: a percent a press
+            if (!ticked.Contains("clip:part:" + pr.Name)) continue;
+            pr.S.Value += (int)Math.Round(n * PART_STEPS);
+            ShowPart(pr); PartChanged(pr);
+            any = true;
+        }
         return Rows.Step(n, ticked) | any;
     }
 }

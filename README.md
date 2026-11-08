@@ -29,6 +29,11 @@ Three boxes, each folding away:
   Tick **COPY ON +1** and each **+1 ▶** carries this frame's pose (whole hand and fingers) onto the next frame as its
   key, so you can walk forward and only fix what changes; **COPY ON −1** does the same walking back with **◀ −1**. Both
   can be on. Only those two buttons copy, one frame at a time, and a frame that already has its own key is left as it was.
+  **GUN PARTS**: a part of the gun that moves with the clip gets its own slider (the Wolfsbane's **DRUM** on the drum-turn
+  clip): how far round it is at this frame, 100 % = one chamber. With no keys it turns evenly from the first frame to the
+  last, so holding a frame holds the drum too, and SLOWER or ADD ONE HERE retime it along with the hand. Drag it on a held
+  frame to make a key (a slow start, a quick finish...); **STRAIGHT AGAIN** takes its keys off. The copy boxes carry the
+  hand, never the drum (a copied drum would stand still).
 - **TIMINGS** (only with Visceral RE8): the mod's named seconds, one slider each with its meaning in words (the cover
   swing, the drum turn, the hammer press, the case slide...). A change reaches the mod within half a second; **RESET**
   goes back to the built-in number.
