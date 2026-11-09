@@ -145,8 +145,10 @@ local function relink()
     if not go then target = nil; return end
     local ok, err = pcall(function()
         local xform = go:call("get_Transform")
+        -- 2026-11-09 (home PC: "anim_timing.lua:149: no joints on pl9000"): Village can hand over a player object whose own
+        -- transform has no joints; its body meshes (below) carry them, so their joints are used instead of stopping here
         local joints, by_name = list_joints(xform)
-        if not joints then error("no joints on " .. tostring(go:call("get_Name"))) end
+        if not joints then joints, by_name = {}, {} end
         local motions = {}
         local mo = motion_t and safe(function() return go:call("getComponent(System.Type)", motion_t) end)
         if mo then motions[#motions + 1] = { mo = mo, src = "player" } end
@@ -156,10 +158,13 @@ local function relink()
             -- a mesh's own joints answer to the same names: kept as a second place to look
             local xf = safe(function() return m.go:call("get_Transform") end)
             if xf then
-                local js, bn = safe(function() return list_joints(xf) end)
+                local okj, js, bn = pcall(list_joints, xf)   -- not safe(): it hands back one value and bn was always nil
+                if not okj then js, bn = nil, nil end
+                if #joints == 0 and js then joints = js end   -- the first mesh with joints stands in for the player's own list
                 if bn then for name, j in pairs(bn) do if by_name[name] == nil then by_name[name] = j end end end
             end
         end
+        if #joints == 0 then error("the player (" .. tostring(go:call("get_Name")) .. ") has no joints yet: a cutscene or a load? it is looked for again") end
         target = { go = go, xform = xform, name = go:call("get_Name") or "?", joints = joints, by_name = by_name, motions = motions }
     end)
     if not ok then target = nil; note(err) end

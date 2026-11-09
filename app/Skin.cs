@@ -39,7 +39,11 @@ static class Backdrop {
 
     public static void Init(Form form, string iconPath, Color background) {
         owner = form; back = background;
-        try { icon = LargestPicture(iconPath); } catch (Exception) { icon = null; }
+        // 2026-11-09 (Tefa: "animations and timings window shows 2 icons at the back"): the picture without the family tile, when it
+        // is beside the icon (<icon>_backdrop.png, from hand-poser-vr's tools/family_icons.py); the tile's edge and the film strip's
+        // rim read as two icons in the faint background. Without it, the icon's biggest picture as before
+        string plain = System.IO.Path.ChangeExtension(iconPath, null) + "_backdrop.png";
+        try { icon = System.IO.File.Exists(plain) ? new Bitmap(plain) : LargestPicture(iconPath); } catch (Exception) { icon = null; }
         form.Resize += (s, e) => { if (Rebuild()) form.Invalidate(true); };
         Rebuild();
     }

@@ -11,6 +11,7 @@ if not exist "%HERE%build" mkdir "%HERE%build"
    /out:"%HERE%dist\AnimTiming.exe" "%HERE%app\*.cs"
 if errorlevel 1 (echo APP BUILD FAILED & exit /b 1)
 copy /y "%HERE%app\anim_timing.ico" "%HERE%dist\" >nul
+copy /y "%HERE%app\anim_timing_backdrop.png" "%HERE%dist\" >nul
 copy /y "%HERE%reframework\autorun\anim_timing.lua" "%HERE%dist\" >nul
 copy /y "%HERE%install.ps1" "%HERE%dist\" >nul
 echo BUILD OK: %HERE%dist

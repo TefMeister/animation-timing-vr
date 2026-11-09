@@ -7,7 +7,7 @@ if ($From -eq "") { $From = if (Test-Path (Join-Path $PSScriptRoot "dist\AnimTim
 $ErrorActionPreference = "Stop"
 $to = Join-Path $env:LOCALAPPDATA "Programs\AnimTiming"
 New-Item -ItemType Directory -Force $to | Out-Null
-foreach ($f in "AnimTiming.exe", "anim_timing.lua", "anim_timing.ico") {
+foreach ($f in "AnimTiming.exe", "anim_timing.lua", "anim_timing.ico", "anim_timing_backdrop.png") {
     if (Test-Path (Join-Path $From $f)) { Copy-Item (Join-Path $From $f) (Join-Path $to $f) -Force }
 }
 $shell = New-Object -ComObject WScript.Shell
