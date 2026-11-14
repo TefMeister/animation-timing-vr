@@ -44,7 +44,7 @@ class TimingUi : Form {
         Text = "Animation & Timing";
         BackColor = Back; ForeColor = Ink;
         Font = new Font("Segoe UI", 9f);
-        ClientSize = new Size(920, 1380);
+        ClientSize = new Size(1820, 1000);   // 2026-11-14 (Tefa: "when they get too tall, just make them wider"): two columns
         MinimumSize = new Size(640, 500);
         StartPosition = FormStartPosition.CenterScreen;
         string ico = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "anim_timing.ico");
@@ -53,21 +53,25 @@ class TimingUi : Form {
         Backdrop.Init(this, ico, Back);
 
         BuildTop();
-        body = new SkinPanel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(6, 4, 6, 4) };
+        body = new SkinPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 4, 6, 4) };
         Controls.Add(body);
         body.BringToFront();
+        // 2026-11-14: two columns, each scrolling on its own: what is playing and the clips on the left, the timings on the right
+        var rightCol = new SkinPanel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(6, 0, 0, 0) };
+        var leftCol = new SkinPanel { Dock = DockStyle.Left, Width = 900, AutoScroll = true };
+        body.Controls.Add(rightCol); body.Controls.Add(leftCol);   // the fill first, so the left column is docked before it
         timings = new TimingsBox(this, Btn, settings.Get("open_timings", "1") == "1");
         NameSection = (c, n) => nudge.Section(c, n);
         clips = new ClipsBox(this, Btn, settings.Get("open_clips", "1") == "1");
         playing = new PlayingBox(this, Btn, settings.Get("open_playing", "1") == "1");
         // docked Top: the last added sits highest
-        body.Controls.Add(timings); body.Controls.Add(clips); body.Controls.Add(playing);
+        rightCol.Controls.Add(timings); leftCol.Controls.Add(clips); leftCol.Controls.Add(playing);   // left: playing over the clips; right: the long timings list
         playing.FoldChanged += on => settings.Set("open_playing", on ? "1" : "0");
         clips.FoldChanged += on => settings.Set("open_clips", on ? "1" : "0");
         timings.FoldChanged += on => settings.Set("open_timings", on ? "1" : "0");
 
         string folder = gameArg ?? settings.Get("game", null);
-        if (!GameLink.LooksLikeGame(folder)) folder = GameLink.FindRunningGame();
+        if (!GameLink.LooksLikeGame(folder) && gameArg == null) folder = GameLink.FindRunningGame();   // 2026-11-14: a --game folder is never swapped for the running game (tests)
         if (GameLink.LooksLikeGame(folder)) UseFolder(folder, gameArg == null);
 
         poll.Interval = POLL_MS; poll.Tick += (s, e) => Poll(); poll.Start();
@@ -157,7 +161,7 @@ class TimingUi : Form {
 
     // ---- polling -------------------------------------------------------------------------------------------------------------
     void Poll() {
-        if (Link.Folder == null && (DateTime.Now - lastFind).TotalMilliseconds > FIND_GAME_EVERY_MS) {
+        if (Link.Folder == null && !Environment.CommandLine.Contains("--game") && (DateTime.Now - lastFind).TotalMilliseconds > FIND_GAME_EVERY_MS) {   // 2026-11-14: a --game run (tests) never finds the running game
             lastFind = DateTime.Now;
             string f = GameLink.FindRunningGame();
             if (f != null) UseFolder(f, true);
