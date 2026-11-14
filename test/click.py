@@ -2,6 +2,8 @@ r"""click.py -- presses buttons in a window by their captions, for a test with n
     python test\click.py "Animation & Timing" "HOLD A FRAME" "+1 ▶" ...
 Prints one line per caption: clicked, or not found."""
 import ctypes, sys, time
+# 2026-11-14: captions with arrows ("+1 ▶") crashed the print on a cp1252 console after the click had landed; print them anyway
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from ctypes import wintypes
 
 user32 = ctypes.windll.user32
