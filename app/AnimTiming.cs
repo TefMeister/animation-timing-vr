@@ -23,6 +23,16 @@ static class Program {
         }
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        // 2026-11-14 (Tefa, in the headset: "got a .net error"): Animation & Timing showed .NET's own error box ("Value of '0' is
+        // not valid for 'index'"), which cannot be read or answered in VR and hid the line it came from. Every such error now goes
+        // to errors.log in the settings folder, with where it happened, and the window carries on (what the box's Continue did).
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (s, e) => {
+            try {
+                Directory.CreateDirectory(AppData);
+                File.AppendAllText(Path.Combine(AppData, "errors.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + e.Exception + Environment.NewLine + Environment.NewLine);
+            } catch (Exception) { }
+        };
         Application.Run(new TimingUi(gameArg));
         return 0;
     }
