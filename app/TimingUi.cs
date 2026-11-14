@@ -106,7 +106,7 @@ class TimingUi : Form {
         scriptNote = new SkinLabel { AutoSize = true, ForeColor = Dim, Padding = new Padding(4, 6, 0, 0) };
         gameRow.Controls.Add(scriptNote);
         nudgeNote = new SkinLabel { Dock = DockStyle.Top, Height = 22, Padding = new Padding(8, 2, 0, 0), ForeColor = Dim,
-            Text = "tick a slider's box and the controller steps it through Window View: X −1, Y −5, A +1, B +5; a held grip repeats" };
+            Text = "tick a slider's box and the right stick steps it through Window View: left / right -1 / +1, up / down +5 / -5, held repeats; Y clears the ticks" };
         top.Controls.Add(nudgeNote); top.Controls.Add(gameRow); top.Controls.Add(status);
     }
 
