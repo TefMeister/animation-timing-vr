@@ -217,7 +217,7 @@ class ClipsBox : FoldBox {
         var events = st.Clips.Select(c => c.Event).ToList();
         var shown = clipPick.Items.Cast<string>().ToList();
         if (!events.SequenceEqual(shown)) {
-            string keep = clipPick.SelectedItem as string;
+            string keep = SelectedClip();
             clipPick.BeginUpdate(); clipPick.Items.Clear();
             foreach (var e in events) clipPick.Items.Add(e);
             clipPick.EndUpdate();
@@ -230,8 +230,16 @@ class ClipsBox : FoldBox {
         playingNote.Text = pl.Count == 0 ? "" : string.Join("  ", pl.Select(p => string.Format("{0} hand: frame {1:0.0}{2}", Json.Str(p["hand"]), Json.Num(p["frame"], 0), Json.Bool(p["held"]) ? " HELD" : "")).ToArray());
     }
 
+    // 2026-11-14 (Tefa's .NET box: "Value of '0' is not valid for 'index'" at ComboBox.ObjectCollection.get_Item in Poll): the
+    // drop-down list can still say entry 0 is selected after its entries were cleared, and SelectedItem then reads an entry
+    // that is not there. The selected clip is read only when its number is really in the list.
+    string SelectedClip() {
+        int i = clipPick.SelectedIndex;
+        return i >= 0 && i < clipPick.Items.Count ? clipPick.Items[i] as string : null;
+    }
+
     void PickClip() {
-        string ev = clipPick.SelectedItem as string;
+        string ev = SelectedClip();
         var c = state.Clips.FirstOrDefault(x => x.Event == ev);
         if (c == null) return;
         if (holding) LetGo();
