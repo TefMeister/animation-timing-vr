@@ -183,7 +183,7 @@ class TimingUi : Form {
             string game = Json.Str(st.ContainsKey("game") ? st["game"] : null), ch = Json.Str(st.ContainsKey("character") ? st["character"] : null);
             bool connected = st.ContainsKey("connected") && Json.Bool(st["connected"]);
             string err = Json.Str(st.ContainsKey("error") ? st["error"] : null);
-            status.Text = game + " · " + (connected ? ch + " · connected" : "no character yet (load into the game)") + (err != "" ? " · script error: " + err : "");
+            status.Text = game + " · " + (connected ? ch + " · connected" : "no character yet (load into the game)") + (err != "" ? " · script error: " + err : "") + SpotLine.Read(Link.Folder);   // 2026-11-24: the hands' spot numbers (Hand Poser)
             status.ForeColor = connected ? Good : Dim;
         }
         scriptButton.Enabled = Link.Folder != null;
