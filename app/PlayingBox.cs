@@ -20,6 +20,8 @@ class PlayingBox : FoldBox {
     readonly ListBox allJoints;
     readonly FlowLayoutPanel filterRow, ctlRow, quickRow, keysRow;
     public readonly NudgeRows Rows;
+    // 2026-11-24: the layer chosen, for the window's one undo (SliderUndo.cs): another one forgets its steps
+    public string UndoContext { get { return layers.SelectedIndex.ToString(); } }
     List<Dictionary<string, object>> layerList = new List<Dictionary<string, object>>();
     List<string> skeleton = new List<string>();
     string game = "";

@@ -62,6 +62,8 @@ class TimingUi : Form {
         body.Controls.Add(rightCol); body.Controls.Add(leftCol);   // the fill first, so the left column is docked before it
         timings = new TimingsBox(this, Btn, settings.Get("open_timings", "1") == "1");
         NameSection = (c, n) => nudge.Section(c, n);
+        nudge.Navigate = true;   // 2026-11-24: Hand Poser's scheme: LT section, LS slider, RS tune, A tick, B untick, X undo, Y redo (NudgeNav.cs)
+        nudge.UndoContext = () => (clips == null ? "" : clips.UndoContext) + "|" + (playing == null ? "" : playing.UndoContext);   // another clip, frame or layer: the one undo forgets
         clips = new ClipsBox(this, Btn, settings.Get("open_clips", "1") == "1");
         playing = new PlayingBox(this, Btn, settings.Get("open_playing", "1") == "1");
         // docked Top: the last added sits highest
@@ -95,7 +97,7 @@ class TimingUi : Form {
     }
 
     void BuildTop() {
-        var top = new SkinPanel { Dock = DockStyle.Top, Height = 92, Tint = Color.FromArgb(120, Back) };
+        var top = new SkinPanel { Dock = DockStyle.Top, Height = 124, Tint = Color.FromArgb(120, Back) };
         Controls.Add(top);
         status = new SkinLabel { Dock = DockStyle.Top, Height = 24, Padding = new Padding(8, 4, 0, 0), ForeColor = Dim };
         var gameRow = Row(32);
@@ -105,9 +107,19 @@ class TimingUi : Form {
         gameRow.Controls.Add(scriptButton);
         scriptNote = new SkinLabel { AutoSize = true, ForeColor = Dim, Padding = new Padding(4, 6, 0, 0) };
         gameRow.Controls.Add(scriptNote);
-        nudgeNote = new SkinLabel { Dock = DockStyle.Top, Height = 22, Padding = new Padding(8, 2, 0, 0), ForeColor = Dim,
-            Text = "tick a slider's box and the right stick steps it through Window View: left / right -1 / +1, up / down +5 / -5, held repeats; Y clears the ticks" };
-        top.Controls.Add(nudgeNote); top.Controls.Add(gameRow); top.Controls.Add(status);
+        // 2026-11-24 (Hand Poser's scheme, NudgeNav.cs / SliderUndo.cs): CLEAR ALL TICKS, the window's one undo / redo (the last slider
+        // used; X / Y on the controller do the same), and what the buttons do
+        var tickRow = Row(32);
+        tickRow.Dock = DockStyle.Top;
+        tickRow.Controls.Add(Btn("CLEAR ALL TICKS", (s, e) => ClearTicks(), 0));
+        undoAll = Btn("↶", (s, e) => { nudge.UndoLast(false); ShowUndo(); }, 40);
+        redoAll = Btn("↷", (s, e) => { nudge.UndoLast(true); ShowUndo(); }, 40);
+        undoAll.Enabled = redoAll.Enabled = false;
+        tickRow.Controls.Add(undoAll); tickRow.Controls.Add(redoAll);
+        nudgeNote = new SkinLabel { AutoSize = true, Padding = new Padding(4, 6, 0, 0), ForeColor = Dim,
+            Text = "through Window View: LT section · LS slider · RS tune (±1, ±5) · A tick · B untick · X undo · Y redo" };
+        tickRow.Controls.Add(nudgeNote);
+        top.Controls.Add(tickRow); top.Controls.Add(gameRow); top.Controls.Add(status);
     }
 
     // ---- the game folder and the script -----------------------------------------------------------------------------------
@@ -193,11 +205,32 @@ class TimingUi : Form {
     // the controller buttons step the ticked sliders (Nudge.cs, through Window View)
     void NudgeTick() {
         bool started;
-        double n = nudge.Poll(ticked.Count > 0, out started);
+        double n = nudge.Poll(ticked.Any(k => !k.StartsWith("section:")) || nudge.PickedKey != null, out started);   // 2026-11-24: or the selected slider
+        ShowUndo();
         if (n == 0) return;
-        var use = nudge.Filter(ticked);   // 2026-11-08: only the part clicked last, when it has ticks (Nudge.cs)
+        var use = nudge.Filter(ticked);   // 2026-11-24: the ticked sliders of the ticked sections, else the one the left stick selected
+        if (started) nudge.BeginUndo(use);   // the last slider(s) used, for the one undo (X, ↶)
         bool any = playing.Rows.Step(n, use) | clips.Step(n, use);
         if (!any) return;
+    }
+    Button undoAll, redoAll;
+    void ShowUndo() {
+        if (undoAll == null) return;
+        bool u = nudge.CanUndo, r = nudge.CanRedo;
+        if (undoAll.Enabled != u) undoAll.Enabled = u;
+        if (redoAll.Enabled != r) redoAll.Enabled = r;
+    }
+    // every tick box carries its key in Tag: unticking them all through the boxes keeps the boxes and the set in step
+    void ClearTicks() {
+        var stack = new Stack<Control>();
+        stack.Push(this);
+        while (stack.Count > 0) {
+            var c = stack.Pop();
+            var cb = c as CheckBox;
+            if (cb != null && cb.Tag is string && cb.Checked && string.IsNullOrEmpty(cb.Text)) cb.Checked = false;
+            foreach (Control k in c.Controls) stack.Push(k);
+        }
+        ticked.Clear();
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e) {

@@ -50,6 +50,9 @@ class ClipsBox : FoldBox {
     int scrubSeq;
     DateTime lastState = DateTime.MinValue;
 
+    // 2026-11-24: the clip and the frame shown, for the window's one undo (SliderUndo.cs): another clip or frame forgets its steps
+    public string UndoContext { get { return (clipPick.SelectedItem as string ?? "") + "@" + frame; } }
+
     public ClipsBox(TimingUi ui, Func<string, EventHandler, int, Button> btn, bool startOpen) : base("OUR CLIPS (Visceral RE8)", btn, startOpen, BASE_H) {
         this.ui = ui;
         mkBtn = btn;
@@ -100,7 +103,12 @@ class ClipsBox : FoldBox {
         // the whole hand: two columns of three, like Hand Poser's docked-wrist box
         var handPanel = new SkinPanel { Height = 150, Tint = Color.FromArgb(40, 30, 34, 50) };
         if (TimingUi.NameSection != null) TimingUi.NameSection(handPanel, "clip:hand");
-        handPanel.Controls.Add(new SkinLabel { Text = "WHOLE HAND ON THE GUN, at this frame (the gun's own axes)", AutoSize = true, ForeColor = TimingUi.Dim, Font = new Font("Segoe UI Semibold", 9f), Location = new Point(4, 2) });
+        {   // 2026-11-24: the box's SECTION tick (Hand Poser's scheme, NudgeNav.cs)
+            var st = new SkinCheckBox { Width = 22, Height = 22, Checked = ui.IsTicked("section:clip:hand"), Tag = "section:clip:hand", Location = new Point(4, 0) };
+            st.CheckedChanged += (s, e) => ui.SetTicked("section:clip:hand", st.Checked);
+            handPanel.Controls.Add(st);
+        }
+        handPanel.Controls.Add(new SkinLabel { Text = "WHOLE HAND ON THE GUN, at this frame (the gun's own axes)", AutoSize = true, ForeColor = TimingUi.Dim, Font = new Font("Segoe UI Semibold", 9f), Location = new Point(30, 2) });
         for (int i = 0; i < 6; i++) {
             int ax = i;
             string key = "clip:hand:" + i;
@@ -174,6 +182,9 @@ class ClipsBox : FoldBox {
             pr.Tick = new SkinCheckBox { Width = 24, Height = 24, Checked = ui.IsTicked(key), Tag = key };
             if (TimingUi.NameSection != null) TimingUi.NameSection(row, key);
             pr.Tick.CheckedChanged += (s, e) => ui.SetTicked(key, pr.Tick.Checked);
+            var st = new SkinCheckBox { Width = 24, Height = 24, Checked = ui.IsTicked("section:" + key), Tag = "section:" + key };   // 2026-11-24: its SECTION tick
+            st.CheckedChanged += (s, e) => ui.SetTicked("section:" + key, st.Checked);
+            row.Controls.Add(st);
             row.Controls.Add(pr.Tick);
             row.Controls.Add(new SkinLabel { Text = name.ToUpperInvariant() + ": how far round (100 % = one chamber)", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(2, 6, 4, 0) });
             pr.S = new FancySlider { Minimum = -25 * PART_STEPS, Maximum = 125 * PART_STEPS, SmallChange = 5, LargeChange = 50, Height = 28, Width = 300 };

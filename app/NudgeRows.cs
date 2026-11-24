@@ -64,11 +64,17 @@ class NudgeRows : SkinPanel {
         var r = new Row { Joint = joint };
         r.Panel = new SkinPanel { Height = 34, Tint = Color.FromArgb(40, 30, 34, 50) };
         if (TimingUi.NameSection != null) TimingUi.NameSection(r.Panel, "rows:" + tag + ":" + joint);
+        {   // 2026-11-24: the row's SECTION tick (Hand Poser's scheme, NudgeNav.cs): ticked, the left stick walks this joint's sliders
+            string sk = "section:rows:" + tag + ":" + joint;
+            var st = new SkinCheckBox { Width = 24, Height = 24, Checked = isTicked(sk), Tag = sk, Location = new Point(34, 5) };
+            st.CheckedChanged += (s, e) => setTicked(sk, st.Checked);
+            r.Panel.Controls.Add(st);
+        }
         var cross = new SkinButton { Text = "✕", Width = 26, Height = 24, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(70, 50, 56), ForeColor = Ink, Location = new Point(4, 5) };
         cross.FlatAppearance.BorderSize = 0;
         cross.Click += (s, e) => Remove(joint);
         r.Panel.Controls.Add(cross);
-        r.Panel.Controls.Add(new SkinLabel { Text = joint, AutoSize = true, ForeColor = Ink, Font = new Font("Segoe UI Semibold", 9.5f), Location = new Point(34, 8), Tag = "name" });
+        r.Panel.Controls.Add(new SkinLabel { Text = joint, AutoSize = true, ForeColor = Ink, Font = new Font("Segoe UI Semibold", 9.5f), Location = new Point(62, 8), Tag = "name" });
         for (int i = 0; i < 3; i++) {
             int ax = i;
             string key = "nudge:" + tag + ":" + joint + ":" + AXES[i];
@@ -111,7 +117,7 @@ class NudgeRows : SkinPanel {
 
     // the name on the left (fixed width), then three equal columns: axis letter, tick, slider, number
     void LayoutRow(Row r) {
-        int w = r.Panel.ClientSize.Width, nameW = 150, x0 = 34 + nameW, col = Math.Max(80, (w - x0 - 6) / 3);
+        int w = r.Panel.ClientSize.Width, nameW = 176, x0 = 34 + nameW, col = Math.Max(80, (w - x0 - 6) / 3);   // 2026-11-24: + the section tick
         for (int i = 0; i < 3; i++) {
             int x = x0 + i * col;
             foreach (Control c in r.Panel.Controls) if ((c.Tag as string) == "ax" + i) c.Location = new Point(x, 8);

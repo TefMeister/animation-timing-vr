@@ -38,8 +38,7 @@ Three boxes, each folding away:
   swing, the drum turn, the hammer press, the case slide...). A change reaches the mod within half a second; **RESET**
   goes back to the built-in number.
 
-Tick the box beside any slider and the right stick steps it through Window View (left / right −1 / +1, up / down
-−5 / +5, held repeats; **Y** unticks every box), so a frame can be tuned from inside the headset.
+The controller, through Window View (the same as Hand Poser since 2026-11-24): **LT** on a part ticks its section box (the left stick then walks the sliders of every ticked section), **left stick** picks a slider (a yellow frame), **right stick** tunes it, or every ticked slider in the ticked sections (left / right −1 / +1, up / down −5 / +5, held repeats), **A** ticks the picked slider, **B** unticks the section's sliders, **X** undo / **Y** redo on the last slider used only (the window's one ↶ ↷ pair does the same), and while a grip holds a window nothing here moves. Not worn yet. So a frame can be tuned from inside the headset; **CLEAR ALL TICKS** unticks everything.
 Only the helper window you clicked last answers the buttons (Hand Poser, Grip Zones, Gun Poser, Animation & Timing):
 a click anywhere in it is enough, so ticked boxes in the other windows stay still. Until one is clicked, all answer.
 

@@ -1,3 +1,4 @@
+// Copied from hand-poser-vr/app (2026-11-24, Tefa: "bring Hand Poser's controller scheme to all helper apps"). Keep them in step: edit Hand Poser's, copy here.
 // Nudge.cs -- the controller buttons step the ticked sliders (2026-10-25, Tefa: "add tick boxes to each customizable hand part,
 // so that when ticked, i don't have to actually slide the sliders, i can use buttons to + and - sliders, maybe X is -1, Y is -5
 // and holding LG makes X and Y repeat press instantly. A and B and RG to do the same respectively for + on the sliders").
@@ -34,6 +35,8 @@
 // that part is shaded DARK YELLOW while this window is the owner. Nothing clicked in a part yet: every ticked slider, as before.
 // Apps ask Allows(control) (is this slider in the reached part?) or Filter(ticked keys) (the ticked keys in the reached part,
 // read from the tick boxes' Tag). A tick box is a CheckBox with no text.
+//
+// 2026-11-24 (Tefa): Hand Poser's left stick picks a slider inside the highlighted part, the right stick tunes it, A ticks: NudgeNav.cs
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -41,10 +44,13 @@ using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-class Nudge : IDisposable {
+partial class Nudge : IDisposable {
     // Window View's shared block (window-view-vr shared.h, header v2 of 636 bytes)
     const string MAPPING = @"Local\FlatToVR_WindowView_v2";
     const int HEADER = 644, CTRL_MODE = 536, STICK_Y = 580, BUTTONS = 584, BUTTON_CLAIM = 628, STICK_X = 636;
+    const int SQUEEZE_R = 576, SQUEEZE_L = 620;   // 2026-11-24: the grips (a window being carried in Window View)
+    const float GRIP_ON = 0.6f, GRIP_OFF = 0.4f;
+    bool gripHeld;
     const int B_A = 1, B_Y = 2, B_B = 4, B_X = 8;
     const float STICK_ON = 0.6f, STICK_OFF = 0.3f;   // the stick counts as pushed past ON, let go below OFF
     public const int HOLD_MS = 400;     // a stick held this long starts repeating
@@ -69,7 +75,7 @@ class Nudge : IDisposable {
     Form markForm;     // the window last clicked in this app: the strip goes on it
     Panel mark;
 
-    public Nudge() { Application.AddMessageFilter(new ClickWatch(this)); }
+    public Nudge() { Application.AddMessageFilter(new ClickWatch(this)); FancySlider.UserPressed += SliderPressed; }   // 2026-11-24: SliderUndo.cs
 
     // ---- the part clicked last (2026-11-08) ----
     readonly Dictionary<string, Control> sections = new Dictionary<string, Control>();
@@ -102,6 +108,7 @@ class Nudge : IDisposable {
     // the part the buttons reach: the last clicked one with a ticked box, or null (then every ticked slider)
     public Control Active {
         get {
+            if (Navigate) return NavSection;   // 2026-11-24 (NudgeNav.cs): the part clicked last, ticks or not
             foreach (var n in recent) {
                 Control c;
                 if (sections.TryGetValue(n, out c) && c != null && !c.IsDisposed && HasTicked(c)) return c;
@@ -120,14 +127,18 @@ class Nudge : IDisposable {
         if (a == null) return ticked;
         var keys = new HashSet<string>();
         TagsOf(a, keys);
+        if (Navigate) { keys.Clear(); foreach (var b in ScopeTicks()) keys.Add((string)b.Tag); }   // 2026-11-24: every ticked section
         keys.IntersectWith(ticked);
+        if (Navigate && keys.Count == 0 && PickedKey != null) keys.Add(PickedKey);   // nothing ticked there: the selected slider
         return keys;
     }
-    void Clicked(Control c) {
+    void Clicked(Control c, int msg) {
+        if (Navigate && msg == 0x207) { SectionClicked(c); return; }   // 2026-11-24: LT (Window View's middle button) picks a section
         string n = SectionOf(c);
         if (n == null) return;
         recent.Remove(n);
         recent.Insert(0, n);
+        if (Navigate) NavClicked(c);
     }
     void Shade(Control want) {   // the reached part dark yellow (its Tint when it has one, else its BackColor)
         if (want == shaded) return;
@@ -152,12 +163,13 @@ class Nudge : IDisposable {
         public ClickWatch(Nudge n) { this.n = n; }
         public bool PreFilterMessage(ref Message m) {
             int k = m.Msg;
+            if (n.Navigate && (k == 0x204 || k == 0xA4)) return false;   // 2026-11-24: right clicks (Window View's A) change nothing here
             if (k == 0x201 || k == 0x203 || k == 0x204 || k == 0x207 || k == 0xA1 || k == 0xA4) {
                 var c = Control.FromHandle(m.HWnd);
                 var f = c as Form ?? (c != null ? c.FindForm() : null);
                 if (f != null) n.markForm = f;
                 n.TakeOwnership();
-                n.Clicked(c);
+                n.Clicked(c, k);
             }
             return false;
         }
@@ -226,21 +238,40 @@ class Nudge : IDisposable {
         pressStarted = false;
         mine = false;
         Owner = IsOwner();
-        Shade(Owner && anyTicked ? Active : null);
+        if (Navigate) ShadeMany(Owner ? Scope() : null);   // 2026-11-24: every ticked section (NudgeNav.cs)
+        else Shade(Owner && anyTicked ? Active : null);
+        if (Navigate) Frame(Owner);
         if (!Open()) return 0;
-        int buttons; float sx, sy; bool ctrl;
+        int buttons; float sx, sy, lx = 0, ly = 0, gr = 0, gl = 0; bool ctrl;
         try {
             ctrl = view.ReadInt32(CTRL_MODE) != 0;
             buttons = view.ReadInt32(BUTTONS);
             sx = view.ReadSingle(STICK_X);
             sy = view.ReadSingle(STICK_Y);
+            if (Navigate) { lx = view.ReadSingle(LSTICK_X); ly = view.ReadSingle(LSTICK_Y); }
+            gr = view.ReadSingle(SQUEEZE_R); gl = view.ReadSingle(SQUEEZE_L);
             if (ctrl && Owner && (anyTicked || mine)) view.Write(BUTTON_CLAIM, GetTickCount64());
         } catch (Exception) { Close(); return 0; }
-        if (!ctrl || !Owner) { lastButtons = buttons; stickDir = 0; return 0; }
+        if (!ctrl || !Owner) { lastButtons = buttons; stickDir = 0; navDir = 0; return 0; }
+        // 2026-11-24 (Tefa: "LG and GR to grab and move windows must suppress all other button functions, right now i can grab the
+        // window with LG to move it and RS will still move to sliders in that window"): a grip held = a window being carried in
+        // Window View: no stick, no button does anything here until both grips are let go
+        gripHeld = gripHeld ? (gr > GRIP_OFF || gl > GRIP_OFF) : (gr > GRIP_ON || gl > GRIP_ON);
+        if (gripHeld) { lastButtons = buttons; stickDir = 0; navDir = 0; return 0; }
+        if (Navigate) {   // 2026-11-24 (NudgeNav.cs): the left stick picks a slider in the highlighted part, A ticks it
+            NavStick(lx, ly);
+            if (mine && Pressed(buttons, B_A)) ToggleSelected();
+            if (mine && Pressed(buttons, B_X)) UndoLast(false);   // 2026-11-24 (Tefa: "X to undo"): the last slider used (SliderUndo.cs)
+            Frame(true);
+        }
         if (mine) {   // Y undo, B redo, X untick everything: the window clicked last only
             // 2026-11-14 (Tefa: "only the actual buttons on the window to do it ... X is right click for left controller anyway and Y
             // can stay as clear all, that i use"): Y unticks every box; undo / redo only by the window's own buttons; X and B free
-            if (Pressed(buttons, B_Y)) UntickAll();
+            // 2026-11-24 (Tefa: "Y redo, X undo B deselect all ticks in the selected section"): in Hand Poser (Navigate) Y is redo and
+            // B unticks the sliders of the highlighted section(s) (NudgeNav.cs); the other helpers keep Y = untick everything
+            if (!Navigate && Pressed(buttons, B_Y)) UntickAll();
+            if (Navigate && Pressed(buttons, B_Y)) UndoLast(true);
+            if (Navigate && Pressed(buttons, B_B)) UntickScope();
         }
         lastButtons = buttons;
         if (!anyTicked) { stickDir = 0; return 0; }
