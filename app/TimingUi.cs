@@ -121,7 +121,7 @@ class TimingUi : Form {
         undoAll.Enabled = redoAll.Enabled = false;
         tickRow.Controls.Add(undoAll); tickRow.Controls.Add(redoAll);
         nudgeNote = new SkinLabel { AutoSize = true, Padding = new Padding(4, 6, 0, 0), ForeColor = Dim,
-            Text = "through Window View: LT section · LS move · A press / tick · RS tune (±1, ±5) · B untick · X undo · Y redo · a grip stops all" };
+            Text = "through Window View: " + Nudge.HELP };
         tickRow.Controls.Add(nudgeNote);
         SectionTick(gameRow, "top:game"); SectionTick(tickRow, "top:ticks");   // 2026-11-25
         top.Controls.Add(tickRow); top.Controls.Add(gameRow); top.Controls.Add(status);

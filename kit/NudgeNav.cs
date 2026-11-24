@@ -7,14 +7,17 @@
 //
 // An app turns it on with Navigate = true (all five helpers do since 2026-11-25).
 //   STOPS: what the left stick can land on. A slider (its tick box and the slider beside it are framed together), a button (the
-//     numbered movement boxes, PLAY ONCE, ↶ ...), a tick box with words (COPY ON +1), an option (LEFT / RIGHT / BOTH) and a
-//     section's own tick. Hidden and greyed-out ones are skipped. (Until 2026-11-25 only sliders: Tefa, in the headset after
+//     numbered movement boxes, PLAY ONCE, ↶ ...), a tick box with words (COPY ON +1), an option (LEFT / RIGHT / BOTH). A
+//     section's own tick is not one (LT ticks sections; A on it would tick a whole section by accident). Hidden and greyed-out
+//     ones are skipped. (Until 2026-11-25 only sliders: Tefa, in the headset after
 //     Animation & Timing's drop-down got stuck: "what i really need now is a system where i have to do as little pointing and
 //     clicking with RT, like you did with hand poser, and that system to work in here too")
 //   left stick: the selection (a bright yellow frame) moves to the nearest stop that way; held past HOLD_MS it repeats every
 //     NAV_REPEAT_MS. With any SECTION ticked it walks only the ticked sections' stops (skipping the rest: "i can tick the thumb and
 //     middle finger and it will bypass the index finger if i keep going down"); with none it walks the whole window, and the part
-//     it walks into becomes the highlighted one (dark yellow). At the edge it stays
+//     it walks into becomes the highlighted one (dark yellow). Left / right keep to the row, or a stop at most ROW_REACH_PX higher
+//     or lower (the next column); up / down take the nearest row that way. The first push in a part lands on its first slider
+//     (its first stop when it has none). At the edge it stays
 //   A: presses the selected stop as a click would: a button clicks, a tick box flips, an option is chosen
 //   right stick: steps the highlighted sections' ticked sliders, or the selected slider when none there is ticked (Nudge.cs)
 //   LT: Window View 1.14 sends the middle button at the left dot while a helper holds the buttons; here it ticks / unticks the
@@ -30,9 +33,13 @@ using System.Windows.Forms;
 
 partial class Nudge {
     public bool Navigate;
+    // the help line every helper shows (2026-11-25: the same words in all five)
+    public const string HELP = "LT section · LS move · A press / tick · RS tune (±1, ±5) · B untick · X undo · Y redo · a grip stops all";
+    public const string HELP_OFF = "start Window View and click the left stick in: ";
     const int LSTICK_Y = 624, LSTICK_X = 640;   // Window View's shared block (window-view-vr shared.h, 1.10)
     const int NAV_REPEAT_MS = 180;              // slower than the right stick's steps: a stop at a time, readable
     const int ROW_SLOP_PX = 18;                 // two stops this close in height are on one row
+    const int ROW_REACH_PX = 36;                // left / right reach a stop at most this much higher or lower (another column)
     const int ACROSS_WEIGHT = 3;                // a step sideways counts this much more than a step the way the stick points
     const int REFIND_MS = 200;                  // how often a selection lost to a rebuilt row is looked for again
     int navDir, navSince, navLast, lastRefind;
@@ -57,10 +64,12 @@ partial class Nudge {
     static bool IsSliderTick(CheckBox b) { return IsTick(b) && b.Tag is string && !IsSectionTick(b); }
 
     // 2026-11-25: a part's SECTION tick, made the same way in every helper (a 24 px box; in a row of buttons it goes first).
-    // Its state is kept by name here, so a part rebuilt with the same name comes back ticked.
+    // Its state is kept by name here, so a part rebuilt with the same name comes back ticked. `into`: the control that shows the
+    // tick when it is not the part itself (the part's head row).
     static readonly HashSet<string> sectionOn = new HashSet<string>();
-    public SkinCheckBox SectionTick(Control part, string name, int x = 4, int y = 4) {
+    public SkinCheckBox SectionTick(Control part, string name, int x = 4, int y = 4, Control into = null) {
         Section(part, name);
+        if (into != null) part = into;
         var t = new SkinCheckBox { Width = 24, Height = 24, Location = new Point(x, y), Tag = "section:" + name, Checked = sectionOn.Contains(name), Margin = new Padding(0, 3, 6, 0) };
         t.CheckedChanged += (s, e) => { if (t.Checked) sectionOn.Add(name); else sectionOn.Remove(name); };
         part.Controls.Add(t);
@@ -118,7 +127,7 @@ partial class Nudge {
     static bool IsStop(Control c) {
         if (c == null || c.IsDisposed || !c.Visible) return false;
         var b = c as CheckBox;
-        if (b != null) return IsTick(b) ? b.Tag is string : b.Enabled;   // a slider's or a section's tick; a box with words
+        if (b != null) return IsTick(b) ? IsSliderTick(b) : b.Enabled;   // a slider's tick; a box with words (never a section's tick)
         if (c is RadioButton || c is Button) return c.Enabled;
         return false;
     }
@@ -195,6 +204,11 @@ partial class Nudge {
         }
     }
 
+    // a part's first stop: its first slider when it has one (a box's header buttons, e.g. a fold, come after), else its first stop
+    static Control First(List<Control> stops) {
+        var sliders = stops.FindAll(s => s is CheckBox && IsSliderTick((CheckBox)s));
+        return TopLeft(sliders.Count > 0 ? sliders : stops);
+    }
     static Control TopLeft(List<Control> stops) {
         Control best = null;
         foreach (var b in stops) {
@@ -218,7 +232,7 @@ partial class Nudge {
             int dx = p.X - c.X, dy = p.Y - c.Y;
             int along = dir == 1 ? dx : dir == 2 ? -dx : dir == 4 ? dy : -dy;
             int side = across ? Math.Abs(dy) : Math.Abs(dx);
-            if (across ? along <= 4 : along <= ROW_SLOP_PX) continue;
+            if (across ? along <= 4 || side > ROW_REACH_PX : along <= ROW_SLOP_PX) continue;
             if (across && side <= ROW_SLOP_PX) side = 0;
             long score = along + (long)ACROSS_WEIGHT * side;
             if (score < bestScore) { bestScore = score; best = s; }
@@ -236,7 +250,7 @@ partial class Nudge {
         if (cur == null) {   // nothing selected there yet: the first stop (top row, leftmost) of the sections, or of the part clicked last
             var home = stops;
             if (chosen.Count == 0 && NavSection != null) { var h = StopsIn(new List<Control> { NavSection }); if (h.Count > 0) home = h; }
-            best = TopLeft(home);
+            best = First(home);
         } else best = Nearest(stops, cur, dir);
         if (best == null) return;   // the edge: stay
         Pick(best);
@@ -277,7 +291,7 @@ partial class Nudge {
         if (t.Checked) {   // its first stop, unless the selection is already in the ticked sections
             var cur = PickedStop();
             if (cur == null || !StopsIn(ChosenSections()).Contains(cur)) {
-                var first = TopLeft(StopsIn(new List<Control> { part }).FindAll(s => s != t));
+                var first = First(StopsIn(new List<Control> { part }));
                 if (first != null) { Pick(first); ScrollTo(first); }
             }
         }
