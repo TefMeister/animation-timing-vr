@@ -240,7 +240,7 @@ class ClipsBox : FoldBox {
         var st = ClipsState.Read(ui.Link.ClipsDir);
         if (!alive) { where.Text = "the mod is not running (no clips_state.json lately)"; return; }
         state = st;
-        where.Text = st.Gun == "" ? "no gun in hand" : "gun " + st.Gun + ": " + st.Clips.Count + " clip(s)" + (st.Relative ? " · relative mode" : "");
+        where.Text = st.Gun == "" ? "no gun in hand" : st.Clips.Count + " movement(s) for the gun in hand";   // 2026-11-24 (Tefa): plain words, no ids
         var events = st.Clips.Select(c => c.Event).ToList();
         var shown = clipPick.Items.Cast<string>().ToList();
         if (events.Count > 0 && !events.SequenceEqual(shown)) {
@@ -258,7 +258,7 @@ class ClipsBox : FoldBox {
             if (fresh != null) { clip = fresh; RebuildParts(); if (edit != null && clip.RawT.Count > 0) edit.Recompute(); ShowFrame(); }
         }
         var pl = st.Playing.Where(p => clip != null && Json.Str(p["key"]) == clip.Key).ToList();
-        playingNote.Text = pl.Count == 0 ? "" : string.Join("  ", pl.Select(p => string.Format("{0} hand: frame {1:0.0}{2}", Json.Str(p["hand"]), Json.Num(p["frame"], 0), Json.Bool(p["held"]) ? " HELD" : "")).ToArray());
+        playingNote.Text = pl.Count == 0 ? "" : string.Join("  ", pl.Select(p => string.Format("{0} hand {1} frame {2}", Json.Str(p["hand"]), Json.Bool(p["held"]) ? "held on" : "on", (int)Math.Round(Json.Num(p["frame"], 0)) + 1)).ToArray());
     }
 
     // 2026-11-14 (Tefa's .NET box: "Value of '0' is not valid for 'index'" at ComboBox.ObjectCollection.get_Item in Poll): the
@@ -351,8 +351,8 @@ class ClipsBox : FoldBox {
         frame = Math.Max(0, Math.Min(n - 1, frame));
         var fr = edit.Frames[frame];
         bool keyed = edit.KeyAt(fr.Src) != null;
-        frameLabel.Text = string.Format("frame {0}/{1}  {2:0.000} s  row {3}{4}", frame, n - 1, edit.T[frame], fr.Src, keyed ? "  KEY" : "");
-        clipLen.Text = string.Format("{0} rows in the file, {1} s long", clip.CsvFrames, edit.T.Length > 0 ? (edit.T[n - 1] + fr.Dt).ToString("0.00") : "?");
+        frameLabel.Text = string.Format("frame {0} of {1}{2}", frame + 1, n, keyed ? "  · has a key" : "");   // 2026-11-24 (Tefa): no seconds or file rows
+        clipLen.Text = "";
         syncing = true;
         var h = edit.HandAt(frame);
         for (int i = 0; i < 6; i++) { hand[i].Value = (int)Math.Round(HandSign(i) * h[i] * STEPS); ShowHand(i); }
@@ -360,7 +360,7 @@ class ClipsBox : FoldBox {
         foreach (var pr in partRows) { pr.S.Value = (int)Math.Round(edit.PartAt(frame, pr.Name) * 100 * PART_STEPS); ShowPart(pr); }
         syncing = false;
         var kf = edit.KeyedFrames();
-        keysNote.Text = (copyNote != null ? copyNote + "  ·  " : "") + (kf.Length == 0 ? "no keys yet: move a slider on a held frame to make one" : "keys on frames: " + string.Join(", ", kf.Select(x => x.ToString()).ToArray()) + "  (" + edit.Ops.Count + " frame edit(s))");
+        keysNote.Text = (copyNote != null ? copyNote + "  ·  " : "") + (kf.Length == 0 ? "no keys yet: move a slider on a held frame to make one" : "keys on frames: " + string.Join(", ", kf.Select(x => (x + 1).ToString()).ToArray()));
     }
     void ShowHand(int i) { handValue[i].Text = string.Format("{0:+0.0;-0.0;0.0} {1}", hand[i].Value / (double)STEPS, HAND_UNIT[i]); }
 

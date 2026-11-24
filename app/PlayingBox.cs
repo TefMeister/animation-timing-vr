@@ -10,7 +10,7 @@ using System.Linq;
 using System.Windows.Forms;
 
 class PlayingBox : FoldBox {
-    const int BASE_H = 262;
+    const int BASE_H = 230;   // 2026-11-24: the animation list is shorter (names only)
     readonly TimingUi ui;
     readonly ListBox layers;
     readonly Button freeze, keep, delKey, clearKeys, jointsBtn;
@@ -29,9 +29,9 @@ class PlayingBox : FoldBox {
 
     public PlayingBox(TimingUi ui, Func<string, EventHandler, int, Button> btn, bool startOpen) : base("PLAYING NOW", btn, startOpen, BASE_H) {
         this.ui = ui;
-        where = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Dim, Location = new Point(200, 9), Tag = "header", Text = "the animations on the player, one line each; pick one to jump its frame" };
+        where = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Dim, Location = new Point(200, 9), Tag = "header", Text = "the game's own animations on Ethan; pick one, then FREEZE and step it" };
         Controls.Add(where);
-        layers = new ListBox { BackColor = TimingUi.Panel2, ForeColor = TimingUi.Ink, BorderStyle = BorderStyle.None, Font = new Font("Consolas", 9f), Height = 76, IntegralHeight = false };
+        layers = new ListBox { BackColor = TimingUi.Panel2, ForeColor = TimingUi.Ink, BorderStyle = BorderStyle.None, Font = new Font("Segoe UI", 9f), Height = 44, IntegralHeight = false };
         Controls.Add(layers);
         var ctl = ctlRow = TimingUi.Row(32);
         freeze = btn("FREEZE", (s, e) => { ui.Frozen = !ui.Frozen; ui.QueueSend(); ShowFreeze(); }, 90);
@@ -148,8 +148,9 @@ class PlayingBox : FoldBox {
         layers.Items.Clear();
         foreach (var L in layerList) {
             string name = Json.Str(L.ContainsKey("name") ? L["name"] : null);
-            layers.Items.Add(string.Format("{0,-14} {1}  bank {2,-5} motion {3,-6} frame {4,6:0.0} / {5,-6:0}  x{6:0.00}  {7}",
-                Json.Str(L["src"]), (int)Json.Num(L["i"], 0), (int)Json.Num(L["bank"], -1), (int)Json.Num(L["motion"], -1), Json.Num(L["frame"], -1), Json.Num(L["end"], -1), Json.Num(L["speed"], -1), name));
+            // 2026-11-24 (Tefa: "a section that displays all the different changing numbers that to me, don't mean anything"):
+            // one plain line per animation, its name only (the numbers stay in the script's state file)
+            layers.Items.Add((layers.Items.Count + 1) + ".  " + (name == "" ? "(an animation with no name)" : name.Replace("_", " ")));
         }
         if (sel >= 0 && sel < layers.Items.Count) layers.SelectedIndex = sel;
         layers.EndUpdate();
