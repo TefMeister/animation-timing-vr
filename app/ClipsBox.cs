@@ -76,7 +76,7 @@ class ClipsBox : FoldBox {
 
         var ctl = TimingUi.Row(32);
         ctl.Controls.Add(btn("PLAY ONCE", (s, e) => PlayOnce(), 0));
-        hold = btn("HOLD A FRAME", (s, e) => { if (holding) LetGo(); else Hold(frame); }, 130);
+        hold = btn("HOLD A FRAME", (s, e) => { if (holding) LetGo(); else Hold(ShownFrame(frame)); }, 130);
         ctl.Controls.Add(hold);
         ctl.Controls.Add(btn("◀ −1", (s, e) => StepCopy(-1), 60));
         ctl.Controls.Add(btn("+1 ▶", (s, e) => StepCopy(+1), 60));
@@ -291,6 +291,15 @@ class ClipsBox : FoldBox {
     }
 
     int Hands() { return handL.Checked ? 1 : handR.Checked ? 2 : 3; }
+
+    // 2026-11-24 (Tefa: the magazine frozen part-way out, "so it then travels from that point backwards and forwards when i tune
+    // ... frame by frame"): when this clip is on the hand right now (Visceral RE8 b160+ follows the LEMI's mag_out by the pull),
+    // HOLD A FRAME starts on the frame it shows, not on the window's own number
+    int ShownFrame(int dflt) {
+        if (clip == null || state == null) return dflt;
+        var p = state.Playing.FirstOrDefault(x => Json.Str(x["key"]) == clip.Key && !Json.Bool(x["held"]));
+        return p == null ? dflt : (int)Math.Round(Json.Num(p["frame"], dflt));
+    }
 
     void Scrub(bool holdIt, int f) {
         if (clip == null || ui.Link.ClipsDir == null) return;
