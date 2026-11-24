@@ -65,10 +65,10 @@ class TimingUi : Form {
         nudge.Navigate = true;   // 2026-11-24: Hand Poser's scheme: LT section, LS slider, RS tune, A tick, B untick, X undo, Y redo (NudgeNav.cs)
         nudge.UndoContext = () => (clips == null ? "" : clips.UndoContext) + "|" + (playing == null ? "" : playing.UndoContext);   // another clip, frame or layer: the one undo forgets
         clips = new ClipsBox(this, Btn, settings.Get("open_clips", "1") == "1");
-        playing = new PlayingBox(this, Btn, settings.Get("open_playing", "1") == "1");
+        playing = new PlayingBox(this, Btn, settings.Get("open_playing_v2", "0") == "1");   // 2026-11-24 (Tefa: "playing now ... i don't really need it i think"): folded away from now on, once; its title opens it
         // docked Top: the last added sits highest
         rightCol.Controls.Add(timings); leftCol.Controls.Add(clips); leftCol.Controls.Add(playing);   // left: playing over the clips; right: the long timings list
-        playing.FoldChanged += on => settings.Set("open_playing", on ? "1" : "0");
+        playing.FoldChanged += on => settings.Set("open_playing_v2", on ? "1" : "0");
         clips.FoldChanged += on => settings.Set("open_clips", on ? "1" : "0");
         timings.FoldChanged += on => settings.Set("open_timings", on ? "1" : "0");
 
