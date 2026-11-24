@@ -141,7 +141,10 @@ def main():
                 playing.append({"event": "round_in", "key": "ri3008_round_in", "hand": "left", "frame": float(k), "held": False, "blend": 1.0})
             write_json(os.path.join(clips, "clips_state.json"), {"gun": "ri3008", "relative": True, "clips": [
                 {"event": "round_in", "hands": "left", "csv_frames": len(CLIP_T), "frames": len(frames), "seconds": t[-1] if t else 0, "joints": CLIP_JOINTS,
-                 "raw_t": CLIP_T, "src": [fr[0] for fr in frames], "t": t, "parts": ["drum"]}], "playing": playing})   # the drum turns with it (2026-11-08)
+                 "raw_t": CLIP_T, "src": [fr[0] for fr in frames], "t": t, "parts": ["drum"]}] + [   # the drum turns with it (2026-11-08)
+                {"event": ev, "hands": "left", "csv_frames": len(CLIP_T), "frames": len(CLIP_T), "seconds": CLIP_T[-1], "joints": CLIP_JOINTS,
+                 "raw_t": CLIP_T, "src": list(range(len(CLIP_T))), "t": CLIP_T, "parts": []} for ev in ("grip", "mag_in", "mag_out")],   # 2026-11-24: more movements, so the numbered boxes show
+                "playing": playing})
         time.sleep(0.03)
     print("DONE last_seq=%s last_scrub=%s" % (last_seq, last_scrub))
 

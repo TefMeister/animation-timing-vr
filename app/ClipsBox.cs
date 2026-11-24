@@ -59,13 +59,16 @@ class ClipsBox : FoldBox {
         where = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Dim, Location = new Point(250, 9), Tag = "header" };
         Controls.Add(where);
         var pick = TimingUi.Row(32);
-        pick.Controls.Add(new SkinLabel { Text = "clip:", AutoSize = true, ForeColor = TimingUi.Dim, Padding = new Padding(0, 6, 0, 0) });
+        pick.Controls.Add(new SkinLabel { Text = "movement:", AutoSize = true, ForeColor = TimingUi.Dim, Padding = new Padding(0, 6, 0, 0) });
         clipPick = new ComboBox { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = TimingUi.Panel2, ForeColor = TimingUi.Ink, FlatStyle = FlatStyle.Flat };
-        clipPick.SelectedIndexChanged += (s, e) => PickClip();
+        clipPick.SelectedIndexChanged += (s, e) => { PickClip(); ShowTiles(); };
+        // 2026-11-24 late (Tefa, in the headset: the drop-down "just stay on top of everything until i actually use mouse to pick
+        // something" and could not be changed; "instead of it having a drop down box, please make all available clips their own
+        // boxes, again numbered"): the list stays as the model, hidden; one numbered box per movement picks it (NEXT CLIP is gone)
+        clipPick.Visible = false;
         pick.Controls.Add(clipPick);
-        // 2026-11-24 (Tefa, in the headset: "i cannot choose between rack and round_in inside the headset, it just lights up"): a
-        // drop-down's list opens as its own small window, which Window View does not show. A button steps to the next clip instead.
-        pick.Controls.Add(btn("NEXT CLIP ▶", (s, e) => NextClip(), 0));
+        tiles = new FlowLayoutPanel { AutoSize = true, WrapContents = false, BackColor = Color.Transparent, Margin = new Padding(0) };
+        pick.Controls.Add(tiles);
         pick.Controls.Add(new SkinLabel { Text = "  on the", AutoSize = true, ForeColor = TimingUi.Dim, Padding = new Padding(0, 6, 0, 0) });
         handL = new SkinRadioButton { Text = "LEFT", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(4, 4, 0, 0) };
         handR = new SkinRadioButton { Text = "RIGHT", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(4, 4, 0, 0) };
@@ -220,13 +223,46 @@ class ClipsBox : FoldBox {
     string wanted;
     bool filling;
 
+    // the numbered boxes, one per movement of the gun in hand, the open one lit
+    FlowLayoutPanel tiles;
+    readonly List<Button> tileBtns = new List<Button>();
+    static string Plain(string ev) {
+        switch (ev) {
+            case "grip": return "hold";
+            case "grip_mag": return "hold at the magazine";
+            case "mag_in": return "magazine in";
+            case "mag_out": return "magazine out";
+            case "round_in": return "round in";
+            case "rack": return "rack";
+            case "reload": return "reload";
+            default: return ev.Replace("_", " ");
+        }
+    }
+    void RebuildTiles() {
+        tiles.SuspendLayout();
+        foreach (var b in tileBtns) { tiles.Controls.Remove(b); b.Dispose(); }
+        tileBtns.Clear();
+        for (int i = 0; i < clipPick.Items.Count; i++) {
+            int k = i;
+            var b = mkBtn((i + 1) + "  " + Plain(clipPick.Items[i] as string ?? "").ToUpperInvariant(), (s, e) => { if (k < clipPick.Items.Count) clipPick.SelectedIndex = k; }, 0);
+            tileBtns.Add(b);
+            tiles.Controls.Add(b);
+        }
+        tiles.ResumeLayout();
+        ShowTiles();
+    }
+    void ShowTiles() {
+        for (int i = 0; i < tileBtns.Count; i++)
+            tileBtns[i].BackColor = i == clipPick.SelectedIndex ? Color.FromArgb(150, 90, 40) : Color.FromArgb(62, 67, 86);
+    }
+
     void NextClip() {
         int n = clipPick.Items.Count;
         if (n == 0) return;
         clipPick.SelectedIndex = (clipPick.SelectedIndex + 1 + n) % n;
     }
 
-    public void FolderChanged() { present = ui.Link.HasVisceral; Visible = present; state = new ClipsState(); clip = null; edit = null; clipPick.Items.Clear(); }
+    public void FolderChanged() { present = ui.Link.HasVisceral; Visible = present; state = new ClipsState(); clip = null; edit = null; clipPick.Items.Clear(); RebuildTiles(); }
 
     // ---- the plugin's state ------------------------------------------------------------------------------------------------------
     public void Poll() {
@@ -253,6 +289,7 @@ class ClipsBox : FoldBox {
                 clipPick.EndUpdate();
                 clipPick.SelectedItem = want;
             } finally { filling = false; }
+            RebuildTiles();
         } else if (clip != null) {   // the same clip, maybe re-edited by the plugin's reading of our file: keep our edit model, refresh its times
             var fresh = st.Clips.FirstOrDefault(c => c.Event == clip.Event);
             if (fresh != null) { clip = fresh; RebuildParts(); if (edit != null && clip.RawT.Count > 0) edit.Recompute(); ShowFrame(); }
