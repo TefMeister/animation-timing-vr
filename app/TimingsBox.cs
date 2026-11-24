@@ -10,7 +10,10 @@ using System.Windows.Forms;
 
 class TimingsBox : FoldBox {
     const int ROW_H = 40, STEPS = 1000, SAVE_DEBOUNCE_MS = 120;
-    class Item { public string Key, Unit, Words; public double Default, Max; public bool Set; public FancySlider Bar; public Label Value; public Button Reset; public Label Words_; }
+    // 2026-11-25: each timing has a tick box (Tag "timing:<key>"), so the right stick tunes it like any slider: STEP_UNITS slider
+    // steps a press (half a percent of its range); the list is a section with its tick in the top line (NudgeNav.cs)
+    const int STEP_UNITS = 5, TICK_W = 30, LIST_TOP = 30;
+    class Item { public string Key, Unit, Words; public double Default, Max; public bool Set; public FancySlider Bar; public Label Value; public Button Reset; public Label Words_; public CheckBox Tick; }
     readonly TimingUi ui;
     readonly Label where;
     readonly List<Item> items = new List<Item>();
@@ -27,8 +30,10 @@ class TimingsBox : FoldBox {
         list = new SkinPanel { Tint = Color.FromArgb(40, 30, 34, 50) };
         list.Layout += (s, e) => LayoutList();
         Controls.Add(list);
+        ui.SectionTick(list, "timings", 6, 3);
+        list.Controls.Add(new SkinLabel { Text = "ALL TIMINGS", AutoSize = true, ForeColor = TimingUi.Dim, Font = new Font("Segoe UI Semibold", 9f), Location = new Point(36, 7) });
         saveTimer.Interval = SAVE_DEBOUNCE_MS; saveTimer.Tick += (s, e) => { saveTimer.Stop(); Save(); };
-        Layout += (s, e) => { list.SetBounds(6, 36, ClientSize.Width - 12, items.Count * ROW_H + 6); list.Visible = open; };
+        Layout += (s, e) => { list.SetBounds(6, 36, ClientSize.Width - 12, LIST_TOP + items.Count * ROW_H + 6); list.Visible = open; };
         SetOpen(open);
     }
 
@@ -56,7 +61,7 @@ class TimingsBox : FoldBox {
         values.Clear();
         string cur = GameLink.ReadAll(File_);
         if (cur != null) { try { var c = Json.Obj(Json.Parse(cur)); if (c != null) foreach (var kv in c) if (kv.Value is double) values[kv.Key] = (double)kv.Value; } catch (FormatException) { } }
-        foreach (var it in items) { list.Controls.Remove(it.Bar); list.Controls.Remove(it.Value); list.Controls.Remove(it.Reset); list.Controls.Remove(it.Words_); }
+        foreach (var it in items) { list.Controls.Remove(it.Bar); list.Controls.Remove(it.Value); list.Controls.Remove(it.Reset); list.Controls.Remove(it.Words_); list.Controls.Remove(it.Tick); }
         items.Clear();
         foreach (var o in Json.Arr(d["items"]) ?? new List<object>()) {
             var e = Json.Obj(o);
@@ -70,12 +75,15 @@ class TimingsBox : FoldBox {
             it.Value = new SkinLabel { AutoSize = true, ForeColor = TimingUi.Ink, Font = new Font("Consolas", 8.5f) };
             it.Reset = ui.Btn("RESET", (s, ev) => { values.Remove(item.Key); item.Set = false; Sync(item); saveTimer.Stop(); saveTimer.Start(); }, 58);
             it.Reset.Height = 22;
-            list.Controls.Add(it.Words_); list.Controls.Add(it.Bar); list.Controls.Add(it.Value); list.Controls.Add(it.Reset);
+            string tk = "timing:" + it.Key;
+            it.Tick = new SkinCheckBox { Width = 24, Height = 24, Checked = ui.IsTicked(tk), Tag = tk };
+            it.Tick.CheckedChanged += (s, ev) => ui.SetTicked(tk, item.Tick.Checked);
+            list.Controls.Add(it.Words_); list.Controls.Add(it.Tick); list.Controls.Add(it.Bar); list.Controls.Add(it.Value); list.Controls.Add(it.Reset);
             items.Add(it);
             Sync(it);
         }
         where.Text = items.Count + " timings from the mod; RESET = the built-in number";
-        Grow(44 + items.Count * ROW_H + 6);
+        Grow(44 + LIST_TOP + items.Count * ROW_H + 6);
         PerformLayout();
     }
 
@@ -97,12 +105,24 @@ class TimingsBox : FoldBox {
         int w = list.ClientSize.Width;
         for (int i = 0; i < items.Count; i++) {
             var it = items[i];
-            int y = 4 + i * ROW_H;
-            it.Words_.Location = new Point(6, y);
-            it.Bar.SetBounds(6, y + 14, Math.Max(80, w - 6 - 250), 26);
+            int y = LIST_TOP + i * ROW_H;
+            it.Words_.Location = new Point(6 + TICK_W, y);
+            it.Tick.Location = new Point(6, y + 15);
+            it.Bar.SetBounds(6 + TICK_W, y + 14, Math.Max(80, w - 6 - TICK_W - 250), 26);
             it.Value.Location = new Point(w - 240, y + 18);
             it.Reset.Location = new Point(w - 64, y + 14);
         }
+    }
+
+    // the right stick (Nudge.cs): the ticked timings move n x STEP_UNITS slider steps, exactly as a drag would
+    public bool Step(double n, HashSet<string> ticked) {
+        bool any = false;
+        foreach (var it in items) {
+            if (!ticked.Contains("timing:" + it.Key)) continue;
+            it.Bar.SetByUser(it.Bar.Value + (int)Math.Round(n * STEP_UNITS));
+            any = true;
+        }
+        return any;
     }
 
     void Save() {

@@ -7,8 +7,12 @@ set HERE=%~dp0
 if not exist "%HERE%dist" mkdir "%HERE%dist"
 if not exist "%HERE%build" mkdir "%HERE%build"
 
+rem 2026-11-25: the shared kit (look, controller buttons, the left stick) is copied from hand-poser-vr\kit; with hand-poser-vr
+rem beside this one, a drifted copy stops the build (python tools\sync_kit.py there brings it in step)
+set KITCHECK=%HERE%..\hand-poser-vr\tools\sync_kit.py
+if exist "%KITCHECK%" (python "%KITCHECK%" --check || (echo KIT OUT OF STEP & exit /b 1))
 "%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /win32icon:"%HERE%app\anim_timing.ico" ^
-   /out:"%HERE%dist\AnimTiming.exe" "%HERE%app\*.cs"
+   /out:"%HERE%dist\AnimTiming.exe" "%HERE%app\*.cs" "%HERE%kit\*.cs"
 if errorlevel 1 (echo APP BUILD FAILED & exit /b 1)
 copy /y "%HERE%app\anim_timing.ico" "%HERE%dist\" >nul
 copy /y "%HERE%app\anim_timing_backdrop.png" "%HERE%dist\" >nul

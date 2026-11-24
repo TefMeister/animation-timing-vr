@@ -68,6 +68,24 @@ GAME = os.path.join(T, "FakeGame")
 CLIPS = os.path.join(GAME, "reframework", "data", "visceral_re8", "clips")
 
 
+def scrub():   # what the window last told the mod's clip player (the movement, the hands, the frame, held or not)
+    time.sleep(0.3)
+    try:
+        with open(os.path.join(CLIPS, "scrub.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def timings():   # the timings the window changed (timings.json)
+    time.sleep(0.5)
+    try:
+        with open(os.path.join(os.path.dirname(CLIPS), "timings.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def hand():   # the whole hand's six numbers on the held frame, as the edit file keeps them (x first)
     time.sleep(0.5)   # the window saves 120 ms after a change
     for name in os.listdir(CLIPS) if os.path.isdir(CLIPS) else []:
@@ -139,6 +157,60 @@ def main():
         h = hand()
         check("a grip held: no button or stick moves a slider", h[0] == -0.5 and h[1] == 0.5, str(h))
         grab("4-end.png")
+
+        # 2026-11-25: the left stick reaches every control and A presses it; the rows are sections with a tick (LT ticks one)
+        kids = children(hwnd)
+        def find(text):
+            return next((h for h, t in kids if t == text), None)
+        post_click(head[0], middle=True)        # LT again: the whole hand's section unticked
+        tile1, play = find("1  ROUND IN"), find("PLAY ONCE")
+        check("the movement boxes and PLAY ONCE are there", bool(tile1 and play))
+        if not (tile1 and play):
+            return
+        post_click(tile1, middle=True)          # LT: the movement row ticked, its first box (1 ROUND IN) selected
+        for _ in range(3):
+            pulse(wv, LSTICK_X, 1.0)            # LS right x3: 4 MAGAZINE OUT
+        pulse(wv, BUTTONS, B_A, as_int=True)    # A: pressed
+        grab("5-movement.png")
+        post_click(tile1, middle=True)          # LT: the movement row unticked
+        post_click(play, middle=True)           # LT: the frame row ticked, PLAY ONCE selected
+        pulse(wv, LSTICK_X, 1.0)                # LS right: HOLD A FRAME
+        pulse(wv, BUTTONS, B_A, as_int=True)    # A: hold
+        sc = scrub()
+        check("LS + A on a numbered box picks MAGAZINE OUT; A on HOLD A FRAME holds it", sc.get("event") == "mag_out" and sc.get("hold") is True and sc.get("frame") == 0, str(sc))
+        pulse(wv, LSTICK_X, 1.0)                # LS right: ◀ −1
+        pulse(wv, LSTICK_X, 1.0)                # LS right: +1 ▶
+        pulse(wv, BUTTONS, B_A, as_int=True)    # A: one frame on
+        sc = scrub()
+        check("A on +1 steps the held frame", sc.get("frame") == 1 and sc.get("hold") is True, str(sc))
+        grab("6-frame.png")
+        post_click(play, middle=True)           # LT: the frame row unticked
+        post_click(tile1, middle=True)          # LT: the movement row again, 1 ROUND IN selected ...
+        for _ in range(4):
+            pulse(wv, LSTICK_X, 1.0)            # ... LS right x4: past the boxes to the first hand option, LEFT
+        pulse(wv, BUTTONS, B_A, as_int=True)    # A: LEFT chosen (MAGAZINE OUT is two-handed in the pretend game: BOTH until now)
+        post_click(tile1, middle=True)
+        post_click(play, middle=True)           # the frame row: PLAY ONCE selected
+        pulse(wv, LSTICK_X, 1.0)                # HOLD A FRAME (it reads LET GO now)
+        pulse(wv, BUTTONS, B_A, as_int=True)    # A: let go ...
+        pulse(wv, BUTTONS, B_A, as_int=True)    # ... A: hold again, now on the left hand only
+        sc = scrub()
+        check("LS reaches the hand options, A chooses LEFT (hands 1 in the scrub)", sc.get("hold") is True and sc.get("hands") == 1, str(sc))
+        post_click(play, middle=True)           # the frame row unticked
+        reset = find("RESET")
+        check("the timings' RESET buttons are there", bool(reset))
+        if reset:
+            post_click(reset, middle=True)      # LT: the timings list ticked, its first timing's tick selected
+            pulse(wv, BUTTONS, B_A, as_int=True)   # A: ticked
+            before = timings()
+            pulse(wv, STICK_X, 1.0)             # RS right: the ticked timing moves
+            after = timings()
+            check("a timing has a tick; RS tunes it", before == {} and len(after) == 1, str(before) + " -> " + str(after))
+            pulse(wv, BUTTONS, B_X, as_int=True)   # X: undo
+            back = timings()
+            k = next(iter(after), None)
+            check("X undoes the timing", k is not None and k in back and abs(back[k] - 0.33) < 0.002 and abs(after[k] - 0.33) > 0.004, str(back))
+        grab("7-end.png")
     finally:
         h = user32.FindWindowW(None, TITLE)
         if h:

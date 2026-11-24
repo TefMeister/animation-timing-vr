@@ -160,6 +160,9 @@ class ClipsBox : FoldBox {
 
         saveTimer.Interval = SAVE_DEBOUNCE_MS; saveTimer.Tick += (s, e) => { saveTimer.Stop(); if (edit != null) { try { edit.Save(); } catch (IOException) { saveTimer.Start(); } } };
         pickRow = pick; ctlRow = ctl; edRow = ed; handBox = handPanel; quickRow = quick; keysRow = keys;
+        // 2026-11-25: every row a section with its tick, so the left stick can be kept to the rows in use (NudgeNav.cs)
+        ui.SectionTick(pick, "clip:movement"); ui.SectionTick(ctl, "clip:frame"); ui.SectionTick(ed, "clip:frames");
+        ui.SectionTick(quick, "clip:fingers"); ui.SectionTick(keys, "clip:keys");
         Layout += (s, e) => DoLayout();
         SetOpen(open);
         Relayout();

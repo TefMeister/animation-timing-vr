@@ -87,6 +87,8 @@ class PlayingBox : FoldBox {
         keys.Controls.Add(keysNote);
         Controls.Add(keys);
 
+        // 2026-11-25: every row a section with its tick (NudgeNav.cs)
+        ui.SectionTick(ctl, "anim:play"); ui.SectionTick(quick, "anim:nudge"); ui.SectionTick(filterRow, "anim:joints"); ui.SectionTick(keys, "anim:keys");
         layers.SelectedIndexChanged += (s, e) => ShowKeys();
         Layout += (s, e) => DoLayout();
         ShowFreeze();

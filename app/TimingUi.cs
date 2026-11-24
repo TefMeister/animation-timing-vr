@@ -11,8 +11,8 @@ using System.Windows.Forms;
 
 class TimingUi : Form {
     const int POLL_MS = 100, COMMAND_DEBOUNCE_MS = 30, FIND_GAME_EVERY_MS = 5000;
-    public static readonly Color Back = Color.FromArgb(28, 30, 38), Panel2 = Color.FromArgb(38, 41, 52), Ink = Color.FromArgb(232, 232, 236);
-    public static readonly Color Dim = Color.FromArgb(150, 155, 170), Good = Color.FromArgb(80, 190, 110), Bad = Color.FromArgb(220, 110, 90);
+    public static readonly Color Back = Look.Back, Panel2 = Look.Panel2, Ink = Look.Ink;   // 2026-11-25: the kit's colours (Skin.cs Look)
+    public static readonly Color Dim = Look.Dim, Good = Look.Good, Bad = Look.Bad;
 
     readonly Settings settings = new Settings();
     public readonly GameLink Link = new GameLink();
@@ -52,6 +52,8 @@ class TimingUi : Form {
         DoubleBuffered = true;
         Backdrop.Init(this, ico, Back);
 
+        NameSection = (c, n) => nudge.Section(c, n);
+        nudge.Navigate = true;   // 2026-11-24: Hand Poser's scheme: LT section, LS walks, RS tune, A press / tick, B untick, X undo, Y redo (NudgeNav.cs)
         BuildTop();
         body = new SkinPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 4, 6, 4) };
         Controls.Add(body);
@@ -61,8 +63,6 @@ class TimingUi : Form {
         var leftCol = new SkinPanel { Dock = DockStyle.Left, Width = 900, AutoScroll = true };
         body.Controls.Add(rightCol); body.Controls.Add(leftCol);   // the fill first, so the left column is docked before it
         timings = new TimingsBox(this, Btn, settings.Get("open_timings", "1") == "1");
-        NameSection = (c, n) => nudge.Section(c, n);
-        nudge.Navigate = true;   // 2026-11-24: Hand Poser's scheme: LT section, LS slider, RS tune, A tick, B untick, X undo, Y redo (NudgeNav.cs)
         nudge.UndoContext = () => (clips == null ? "" : clips.UndoContext) + "|" + (playing == null ? "" : playing.UndoContext);   // another clip, frame or layer: the one undo forgets
         clips = new ClipsBox(this, Btn, settings.Get("open_clips", "1") == "1");
         playing = new PlayingBox(this, Btn, settings.Get("open_playing_v2", "0") == "1");   // 2026-11-24 (Tefa: "playing now ... i don't really need it i think"): folded away from now on, once; its title opens it
@@ -85,6 +85,10 @@ class TimingUi : Form {
     protected override void OnPaintBackground(PaintEventArgs e) { Backdrop.PaintUnder(this, e.Graphics, e.ClipRectangle); }
 
     // ---- building ---------------------------------------------------------------------------------------------------------
+    // 2026-11-25 (Tefa: "place things into sections so when i start tuning something, all the controls are easily navigatiavble with
+    // LS"): every row and box of the window is a section with its own tick (the kit's SectionTick, NudgeNav.cs)
+    public SkinCheckBox SectionTick(Control part, string name, int x = 4, int y = 4) { return nudge.SectionTick(part, name, x, y); }
+
     public Button Btn(string text, EventHandler onClick, int width) {
         var b = new SkinButton { Text = text, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(62, 67, 86), ForeColor = Ink, Height = 26, AutoSize = width == 0, Margin = new Padding(3) };
         b.FlatAppearance.BorderSize = 0;
@@ -117,8 +121,9 @@ class TimingUi : Form {
         undoAll.Enabled = redoAll.Enabled = false;
         tickRow.Controls.Add(undoAll); tickRow.Controls.Add(redoAll);
         nudgeNote = new SkinLabel { AutoSize = true, Padding = new Padding(4, 6, 0, 0), ForeColor = Dim,
-            Text = "through Window View: LT section · LS slider · RS tune (±1, ±5) · A tick · B untick · X undo · Y redo" };
+            Text = "through Window View: LT section · LS move · A press / tick · RS tune (±1, ±5) · B untick · X undo · Y redo · a grip stops all" };
         tickRow.Controls.Add(nudgeNote);
+        SectionTick(gameRow, "top:game"); SectionTick(tickRow, "top:ticks");   // 2026-11-25
         top.Controls.Add(tickRow); top.Controls.Add(gameRow); top.Controls.Add(status);
     }
 
@@ -210,7 +215,7 @@ class TimingUi : Form {
         if (n == 0) return;
         var use = nudge.Filter(ticked);   // 2026-11-24: the ticked sliders of the ticked sections, else the one the left stick selected
         if (started) nudge.BeginUndo(use);   // the last slider(s) used, for the one undo (X, ↶)
-        bool any = playing.Rows.Step(n, use) | clips.Step(n, use);
+        bool any = playing.Rows.Step(n, use) | clips.Step(n, use) | timings.Step(n, use);   // 2026-11-25: the timings too
         if (!any) return;
     }
     Button undoAll, redoAll;
