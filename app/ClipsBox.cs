@@ -60,6 +60,9 @@ class ClipsBox : FoldBox {
         clipPick = new ComboBox { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = TimingUi.Panel2, ForeColor = TimingUi.Ink, FlatStyle = FlatStyle.Flat };
         clipPick.SelectedIndexChanged += (s, e) => PickClip();
         pick.Controls.Add(clipPick);
+        // 2026-11-24 (Tefa, in the headset: "i cannot choose between rack and round_in inside the headset, it just lights up"): a
+        // drop-down's list opens as its own small window, which Window View does not show. A button steps to the next clip instead.
+        pick.Controls.Add(btn("NEXT CLIP ▶", (s, e) => NextClip(), 0));
         pick.Controls.Add(new SkinLabel { Text = "  on the", AutoSize = true, ForeColor = TimingUi.Dim, Padding = new Padding(0, 6, 0, 0) });
         handL = new SkinRadioButton { Text = "LEFT", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(4, 4, 0, 0) };
         handR = new SkinRadioButton { Text = "RIGHT", AutoSize = true, ForeColor = TimingUi.Ink, Padding = new Padding(4, 4, 0, 0) };
@@ -199,6 +202,19 @@ class ClipsBox : FoldBox {
         ShowFrame();
     }
 
+    // 2026-11-24 (Tefa: "it keeps resetting it to rack"): when the gun goes into the left hand the mod's list is empty for a
+    // moment; the window cleared its list, forgot the pick and took entry 0 when the list came back. Now the clip Tefa picked
+    // is remembered (wanted), an empty list leaves the shown one alone, and a refill that lands on the clip already open keeps
+    // its frame and its hold.
+    string wanted;
+    bool filling;
+
+    void NextClip() {
+        int n = clipPick.Items.Count;
+        if (n == 0) return;
+        clipPick.SelectedIndex = (clipPick.SelectedIndex + 1 + n) % n;
+    }
+
     public void FolderChanged() { present = ui.Link.HasVisceral; Visible = present; state = new ClipsState(); clip = null; edit = null; clipPick.Items.Clear(); }
 
     // ---- the plugin's state ------------------------------------------------------------------------------------------------------
@@ -216,12 +232,16 @@ class ClipsBox : FoldBox {
         where.Text = st.Gun == "" ? "no gun in hand" : "gun " + st.Gun + ": " + st.Clips.Count + " clip(s)" + (st.Relative ? " · relative mode" : "");
         var events = st.Clips.Select(c => c.Event).ToList();
         var shown = clipPick.Items.Cast<string>().ToList();
-        if (!events.SequenceEqual(shown)) {
+        if (events.Count > 0 && !events.SequenceEqual(shown)) {
             string keep = SelectedClip();
-            clipPick.BeginUpdate(); clipPick.Items.Clear();
-            foreach (var e in events) clipPick.Items.Add(e);
-            clipPick.EndUpdate();
-            if (keep != null && events.Contains(keep)) clipPick.SelectedItem = keep; else if (events.Count > 0) clipPick.SelectedIndex = 0;
+            string want = wanted != null && events.Contains(wanted) ? wanted : keep != null && events.Contains(keep) ? keep : events[0];
+            filling = true;
+            try {
+                clipPick.BeginUpdate(); clipPick.Items.Clear();
+                foreach (var e in events) clipPick.Items.Add(e);
+                clipPick.EndUpdate();
+                clipPick.SelectedItem = want;
+            } finally { filling = false; }
         } else if (clip != null) {   // the same clip, maybe re-edited by the plugin's reading of our file: keep our edit model, refresh its times
             var fresh = st.Clips.FirstOrDefault(c => c.Event == clip.Event);
             if (fresh != null) { clip = fresh; RebuildParts(); if (edit != null && clip.RawT.Count > 0) edit.Recompute(); ShowFrame(); }
@@ -242,6 +262,11 @@ class ClipsBox : FoldBox {
         string ev = SelectedClip();
         var c = state.Clips.FirstOrDefault(x => x.Event == ev);
         if (c == null) return;
+        if (filling && clip != null && c.Event == clip.Event) {   // the list came back with the same clip open: keep frame and hold
+            clip = c; RebuildParts(); if (edit != null && clip.RawT.Count > 0) edit.Recompute(); ShowFrame();
+            return;
+        }
+        if (!filling) wanted = ev;
         if (holding) LetGo();
         clip = c;
         edit = new ClipEdit(clip, ui.Link.ClipsDir);
